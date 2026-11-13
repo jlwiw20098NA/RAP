@@ -1,0 +1,12 @@
+abstract;
+strict ( 2 );
+with hierarchy;
+
+define behavior for ZMRMD_A_SaveClsHdr alias SaveHdr
+{
+  association _Item;
+}
+
+define behavior for ZMRMD_A_SaveClsItm alias SaveItm
+{
+}

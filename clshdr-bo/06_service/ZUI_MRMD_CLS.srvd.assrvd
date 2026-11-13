@@ -1,0 +1,7 @@
+@EndUserText.label: 'Class Header/Item API'
+// Projection 없이 인터페이스 루트 뷰를 바로 노출
+// Service Binding: OData V4 - Web API
+define service ZUI_MRMD_CLS {
+  expose ZMRMD_I_ClsHdr as Header;
+  expose ZMRMD_I_ClsItm as Item;
+}

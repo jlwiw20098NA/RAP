@@ -1,0 +1,38 @@
+managed implementation in class zbp_mrmd_i_clsitm unique;
+strict ( 2 );
+
+define behavior for ZMRMD_I_ClsItm alias Item
+persistent table zmrmd_t_clsitm
+lock master
+authorization master ( global )
+{
+  create;
+  update;
+  delete;
+
+  // 아이템 키 + 헤더 연결 필드: 생성 때만 지정, 수정 불가
+  field ( mandatory : create, readonly : update ) Plant, Material, CompanyCode, ItemGroupCode;
+  field ( readonly ) CreateDate, CreateTime, ChangeDate, ChangeTime,
+                     CreatedTimestamp, ChangedTimestamp, CreatedBy, ChangedBy;
+
+  determination setCreateStamp on save { create; }
+  determination setChangeStamp on save { field DetailedItemGroupCode; }
+
+  validation validatePlantMaterial on save { create; field Plant, Material; }
+
+  mapping for zmrmd_t_clsitm
+  {
+    Plant                 = plant;
+    Material              = material;
+    CompanyCode           = company_code;
+    ItemGroupCode         = item_group;
+    DetailedItemGroupCode = detail_item_group;
+    CreateDate            = erdat;
+    CreateTime            = erzet;
+    CreatedBy             = ernam;
+    ChangeDate            = aedat;
+    ChangeTime            = aezet;
+    ChangedBy             = aenam;
+    // CreatedTimestamp, ChangedTimestamp: 계산 필드라 매핑하지 않음
+  }
+}
