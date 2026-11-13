@@ -33,6 +33,7 @@ CLASS lhc_header IMPLEMENTATION.
     DATA: ls_hdr_failed   TYPE RESPONSE FOR FAILED EARLY zmrmd_i_clshdr,
           ls_hdr_reported TYPE RESPONSE FOR REPORTED EARLY zmrmd_i_clshdr,
           lt_itm_read     TYPE TABLE FOR READ IMPORT zmrmd_i_clsitm,
+          lt_itm_exist    TYPE TABLE FOR READ RESULT zmrmd_i_clsitm,
           lt_itm_create   TYPE TABLE FOR CREATE zmrmd_i_clsitm,
           lt_itm_update   TYPE TABLE FOR UPDATE zmrmd_i_clsitm,
           lv_has_error    TYPE abap_boolean.
@@ -60,11 +61,14 @@ CLASS lhc_header IMPLEMENTATION.
       ENDIF.
 
       "------------------------------------------------------------
-      " 1. 헤더: 있으면 수정, 없으면 생성 (자기 BO -> IN LOCAL MODE)
+      " 1. 헤더 (자기 BO -> IN LOCAL MODE)
+      "    없음            -> 생성
+      "    있음 + 값 변경  -> 수정
+      "    있음 + 값 동일  -> 건너뜀 (변경일시/잠금 없이 아이템만 처리)
       "------------------------------------------------------------
       READ ENTITIES OF zmrmd_i_clshdr IN LOCAL MODE
         ENTITY Header
-        FIELDS ( ItemGroupCode )
+        FIELDS ( ItemGroupCode KiloUnit )
         WITH VALUE #( ( CompanyCode          = ls_p-CompanyCode
                         ClassLevel1          = ls_p-ClassLevel1
                         ClassLevel2          = ls_p-ClassLevel2
@@ -88,18 +92,24 @@ CLASS lhc_header IMPLEMENTATION.
           FAILED ls_hdr_failed
           REPORTED ls_hdr_reported.
       ELSE.
-        MODIFY ENTITIES OF zmrmd_i_clshdr IN LOCAL MODE
-          ENTITY Header
-          UPDATE FIELDS ( ItemGroupCode KiloUnit )
-          WITH VALUE #( ( CompanyCode          = ls_p-CompanyCode
-                          ClassLevel1          = ls_p-ClassLevel1
-                          ClassLevel2          = ls_p-ClassLevel2
-                          ClassLevel3          = ls_p-ClassLevel3
-                          ManufacturingProcess = ls_p-ManufacturingProcess
-                          ItemGroupCode        = ls_p-ItemGroupCode
-                          KiloUnit             = ls_p-KiloUnit ) )
-          FAILED ls_hdr_failed
-          REPORTED ls_hdr_reported.
+        DATA(ls_hdr_db) = lt_hdr_exist[ 1 ].
+
+        IF ls_hdr_db-ItemGroupCode <> ls_p-ItemGroupCode
+        OR ls_hdr_db-KiloUnit      <> ls_p-KiloUnit.
+          MODIFY ENTITIES OF zmrmd_i_clshdr IN LOCAL MODE
+            ENTITY Header
+            UPDATE FIELDS ( ItemGroupCode KiloUnit )
+            WITH VALUE #( ( CompanyCode          = ls_p-CompanyCode
+                            ClassLevel1          = ls_p-ClassLevel1
+                            ClassLevel2          = ls_p-ClassLevel2
+                            ClassLevel3          = ls_p-ClassLevel3
+                            ManufacturingProcess = ls_p-ManufacturingProcess
+                            ItemGroupCode        = ls_p-ItemGroupCode
+                            KiloUnit             = ls_p-KiloUnit ) )
+            FAILED ls_hdr_failed
+            REPORTED ls_hdr_reported.
+        ENDIF.
+        " 값이 같으면 헤더는 손대지 않고 아이템 처리로 진행
       ENDIF.
 
       IF ls_hdr_failed-header IS NOT INITIAL.
@@ -116,12 +126,14 @@ CLASS lhc_header IMPLEMENTATION.
       lt_itm_read = VALUE #( FOR ls_i IN ls_p-_Item
                              ( Plant = ls_i-Plant Material = ls_i-Material ) ).
 
+      CLEAR lt_itm_exist.   " 이전 루프 회차 결과가 남지 않도록
+
       IF lt_itm_read IS NOT INITIAL.
         READ ENTITIES OF zmrmd_i_clsitm
           ENTITY Item
-          FIELDS ( CompanyCode ItemGroupCode )
+          FIELDS ( CompanyCode ItemGroupCode DetailedItemGroupCode )
           WITH lt_itm_read
-          RESULT DATA(lt_itm_exist).
+          RESULT lt_itm_exist.
       ENDIF.
 
       "------------------------------------------------------------
@@ -129,8 +141,10 @@ CLASS lhc_header IMPLEMENTATION.
       "------------------------------------------------------------
       LOOP AT ls_p-_Item INTO DATA(ls_item).
 
+        " RAP 파생 타입의 보조 키 id(= 엔티티 키)를 명시 -> 성능 경고 해소
         READ TABLE lt_itm_exist INTO DATA(ls_exist)
-             WITH KEY Plant = ls_item-Plant Material = ls_item-Material.
+             WITH KEY id COMPONENTS Plant    = ls_item-Plant
+                                    Material = ls_item-Material.
 
         IF sy-subrc <> 0.
           " 없음 -> 생성 (CompanyCode, ItemGroupCode는 헤더 값으로)
@@ -152,12 +166,13 @@ CLASS lhc_header IMPLEMENTATION.
                                               |이미 품목그룹 { ls_exist-ItemGroupCode }에 속해 있습니다| ) )
                  TO reported-header.
 
-        ELSE.
-          " 있음 + 같은 품목그룹 -> 수정
+        ELSEIF ls_exist-DetailedItemGroupCode <> ls_item-DetailedItemGroupCode.
+          " 있음 + 같은 품목그룹 + 값 변경 -> 수정
           APPEND VALUE #( Plant                 = ls_item-Plant
                           Material              = ls_item-Material
                           DetailedItemGroupCode = ls_item-DetailedItemGroupCode ) TO lt_itm_update.
         ENDIF.
+        " 있음 + 같은 품목그룹 + 값 동일 -> 아무것도 하지 않음
       ENDLOOP.
 
       IF lv_has_error = abap_true.

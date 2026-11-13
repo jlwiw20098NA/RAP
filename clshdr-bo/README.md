@@ -45,11 +45,15 @@ deep 파라미터(헤더 + 아이템 목록)를 받아 **한 트랜잭션으로 
 ```
 POST SaveAll (헤더 + 아이템 배열)
   0. payload 안 (Plant, Material) 중복 체크
-  1. 헤더(키 5개) 존재 확인 -> CREATE / UPDATE      (헤더 BO, IN LOCAL MODE)
+  1. 헤더(키 5개) 존재 확인                         (헤더 BO, IN LOCAL MODE)
+     없음                      -> CREATE
+     있음 + 값 변경             -> UPDATE
+     있음 + 값 동일             -> 건너뜀 (헤더 변경일시·잠금 없이 아이템만 처리)
   2. 아이템(Plant, Material) 존재 확인              (아이템 BO, EML)
-  3. 없음                      -> CREATE (CompanyCode, ItemGroupCode = 헤더 값)
-     있음 + 같은 품목그룹       -> UPDATE (DetailedItemGroupCode)
-     있음 + 다른 품목그룹       -> 오류
+  3. 없음                              -> CREATE (CompanyCode, ItemGroupCode = 헤더 값)
+     있음 + 같은 품목그룹 + 값 변경      -> UPDATE (DetailedItemGroupCode)
+     있음 + 같은 품목그룹 + 값 동일      -> 아무것도 안 함
+     있음 + 다른 품목그룹               -> 오류
   4. 아이템 BO에 MODIFY ENTITIES
   -> 하나라도 failed면 전체 롤백
   -> 저장 단계: determination(일시), validation(회사코드, 플랜트/자재)
