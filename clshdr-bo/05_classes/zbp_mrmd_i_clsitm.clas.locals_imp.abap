@@ -56,10 +56,16 @@ CLASS lhc_item IMPLEMENTATION.
       RESULT DATA(lt_items).
 
     LOOP AT lt_items INTO DATA(ls).
+      " [수정 #8] 2026-11-16 DCL 우회
+      " 기존: SELECT ... FROM I_ProductPlantBasic (authorizationCheck #CHECK → 권한 없는 행이 걸러져
+      "       자재가 있어도 '없음'으로 판단되어 저장 실패)
+      " 변경: WITH PRIVILEGED ACCESS → 이 SELECT에서만 CDS 접근 제어(DCL)를 적용하지 않음
+      "       존재 여부만 보는 기술적 검증이라 우회. 사용자 권한 체크는 authorization 메서드에서 처리
       SELECT SINGLE @abap_true FROM I_ProductPlantBasic
         WHERE Product = @ls-Material
           AND Plant   = @ls-Plant
-        INTO @DATA(lv_exists).
+        INTO @DATA(lv_exists)
+        WITH PRIVILEGED ACCESS.
       IF lv_exists = abap_false.
         APPEND VALUE #( %tky = ls-%tky ) TO failed-item.
         APPEND VALUE #( %tky = ls-%tky
