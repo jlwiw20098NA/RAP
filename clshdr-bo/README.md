@@ -38,7 +38,7 @@ deep 파라미터(헤더 + 아이템 목록)를 받아 **한 트랜잭션으로 
 - 계산 필드는 테이블 컬럼이 없으므로 `mapping for`에 넣지 않고 `readonly`로 둡니다.
 - 값은 determination(`setCreateStamp`, `setChangeStamp`)이 **서버 시스템 시간**으로 채웁니다.
   CDS도 `abap_system_timezone`으로 해석하므로 저장 기준과 해석 기준이 같습니다.
-- 생성자/변경자(`ERNAM`, `AENAM`)는 실제 컬럼이라 `@Semantics.user.*`로 프레임워크가 채웁니다.
+- 생성자/변경자(`ERNAM`, `AENAM`)도 같은 determination이 `cl_abap_context_info=>get_user_technical_name( )`으로 채웁니다.
 
 ## SaveAll 흐름
 

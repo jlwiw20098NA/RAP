@@ -31,9 +31,9 @@ define root view entity ZMRMD_I_ClsItm
                           abap_system_timezone( $session.client, 'NULL' ),
                           $session.client, 'NULL' ) as ChangedTimestamp,
 
-      @Semantics.user.createdBy: true
+      // [수정 #9] @Semantics.user.createdBy 제거 → determination setCreateStamp가 채움
       CreatedBy,
-      @Semantics.user.lastChangedBy: true
+      // [수정 #9] @Semantics.user.lastChangedBy 제거 → determination setChangeStamp가 채움
       ChangedBy,
 
       _Header

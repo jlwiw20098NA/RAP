@@ -27,26 +27,32 @@ CLASS lhc_item IMPLEMENTATION.
   METHOD setCreateStamp.
     DATA(lv_date) = cl_abap_context_info=>get_system_date( ).
     DATA(lv_time) = cl_abap_context_info=>get_system_time( ).
+    " [수정 #9] 2026-11-16 사용자 필드도 직접 세팅 (자동 채움이 안 되는 문제)
+    DATA(lv_user) = cl_abap_context_info=>get_user_technical_name( ).
 
     MODIFY ENTITIES OF zmrmd_i_clsitm IN LOCAL MODE
       ENTITY Item
-      UPDATE FIELDS ( CreateDate CreateTime )
+      UPDATE FIELDS ( CreateDate CreateTime CreatedBy )   " [수정 #9] CreatedBy 추가
       WITH VALUE #( FOR k IN keys ( %tky       = k-%tky
                                     CreateDate = lv_date
-                                    CreateTime = lv_time ) ).
+                                    CreateTime = lv_time
+                                    CreatedBy  = lv_user ) ).   " [수정 #9]
   ENDMETHOD.
 
 
   METHOD setChangeStamp.
     DATA(lv_date) = cl_abap_context_info=>get_system_date( ).
     DATA(lv_time) = cl_abap_context_info=>get_system_time( ).
+    " [수정 #9] 2026-11-16 사용자 필드도 직접 세팅 (자동 채움이 안 되는 문제)
+    DATA(lv_user) = cl_abap_context_info=>get_user_technical_name( ).
 
     MODIFY ENTITIES OF zmrmd_i_clsitm IN LOCAL MODE
       ENTITY Item
-      UPDATE FIELDS ( ChangeDate ChangeTime )
+      UPDATE FIELDS ( ChangeDate ChangeTime ChangedBy )   " [수정 #9] ChangedBy 추가
       WITH VALUE #( FOR k IN keys ( %tky       = k-%tky
                                     ChangeDate = lv_date
-                                    ChangeTime = lv_time ) ).
+                                    ChangeTime = lv_time
+                                    ChangedBy  = lv_user ) ).   " [수정 #9]
   ENDMETHOD.
 
 
