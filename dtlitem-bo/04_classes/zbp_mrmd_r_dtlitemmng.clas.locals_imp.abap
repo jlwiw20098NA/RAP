@@ -22,14 +22,9 @@ CLASS lhc_mng DEFINITION INHERITING FROM cl_abap_behavior_handler.
     METHODS setChangeStamp FOR DETERMINE ON SAVE
       IMPORTING keys FOR Mng~setChangeStamp.
 
-    "! EML 결과(failed/reported)를 action 결과로 옮김. 실패가 있으면 ev_error = abap_true
-    METHODS collect_result
-      IMPORTING iv_cid      TYPE abp_behv_cid
-                is_failed   TYPE RESPONSE FOR FAILED EARLY zmrmd_r_dtlitemmng
-                is_reported TYPE RESPONSE FOR REPORTED EARLY zmrmd_r_dtlitemmng
-      EXPORTING ev_error    TYPE abap_boolean
-      CHANGING  cs_failed   TYPE RESPONSE FOR FAILED EARLY zmrmd_r_dtlitemmng
-                cs_reported TYPE RESPONSE FOR REPORTED EARLY zmrmd_r_dtlitemmng.
+    " [수정 #1] collect_result 헬퍼 메서드 제거
+    "  기존: 파라미터를 TYPE RESPONSE FOR FAILED/REPORTED EARLY ... 로 선언 → "Unable to interpret Failed"
+    "  변경: 같은 로직을 SaveAll 안에 직접 작성 (5단계 EML 결과 처리)
 ENDCLASS.
 
 
@@ -63,7 +58,7 @@ CLASS lhc_mng IMPLEMENTATION.
     LOOP AT keys INTO DATA(ls_key).
       CLEAR: lt_mng_read, lt_mng_db, lt_usr_read, lt_usr_db, lt_chd_read, lt_chd_db,
              lt_mng_create, lt_mng_update, lt_mng_delete, lt_usr_create, lt_usr_delete,
-             ls_failed, ls_reported, lt_msg.
+             ls_failed, ls_reported, lt_msg, lv_eml_error.
 
       DATA(lt_mng_in) = ls_key-%param-_Mng.
       DATA(lt_usr_in) = ls_key-%param-_User.
@@ -352,9 +347,17 @@ CLASS lhc_mng IMPLEMENTATION.
             DELETE FROM lt_usr_delete
           FAILED ls_failed
           REPORTED ls_reported.
-        collect_result( EXPORTING iv_cid = ls_key-%cid is_failed = ls_failed is_reported = ls_reported
-                        IMPORTING ev_error = lv_eml_error
-                        CHANGING  cs_failed = failed cs_reported = reported ).
+        " [수정 #1] EML 결과를 action 결과로 옮김 (기존: collect_result 호출)
+        IF ls_failed-mng IS NOT INITIAL OR ls_failed-user IS NOT INITIAL.
+          lv_eml_error = abap_true.
+          APPEND VALUE #( %cid = ls_key-%cid ) TO failed-mng.
+        ENDIF.
+        LOOP AT ls_reported-mng INTO DATA(ls_rm1).
+          APPEND VALUE #( %cid = ls_key-%cid %msg = ls_rm1-%msg ) TO reported-mng.
+        ENDLOOP.
+        LOOP AT ls_reported-user INTO DATA(ls_ru1).
+          APPEND VALUE #( %cid = ls_key-%cid %msg = ls_ru1-%msg ) TO reported-mng.
+        ENDLOOP.
         IF lv_eml_error = abap_true.
           CONTINUE.
         ENDIF.
@@ -375,9 +378,17 @@ CLASS lhc_mng IMPLEMENTATION.
               WITH lt_usr_create
           FAILED ls_failed
           REPORTED ls_reported.
-        collect_result( EXPORTING iv_cid = ls_key-%cid is_failed = ls_failed is_reported = ls_reported
-                        IMPORTING ev_error = lv_eml_error
-                        CHANGING  cs_failed = failed cs_reported = reported ).
+        " [수정 #1] EML 결과를 action 결과로 옮김 (기존: collect_result 호출)
+        IF ls_failed-mng IS NOT INITIAL OR ls_failed-user IS NOT INITIAL.
+          lv_eml_error = abap_true.
+          APPEND VALUE #( %cid = ls_key-%cid ) TO failed-mng.
+        ENDIF.
+        LOOP AT ls_reported-mng INTO DATA(ls_rm2).
+          APPEND VALUE #( %cid = ls_key-%cid %msg = ls_rm2-%msg ) TO reported-mng.
+        ENDLOOP.
+        LOOP AT ls_reported-user INTO DATA(ls_ru2).
+          APPEND VALUE #( %cid = ls_key-%cid %msg = ls_ru2-%msg ) TO reported-mng.
+        ENDLOOP.
         IF lv_eml_error = abap_true.
           CONTINUE.
         ENDIF.
@@ -391,25 +402,18 @@ CLASS lhc_mng IMPLEMENTATION.
             DELETE FROM lt_mng_delete
           FAILED ls_failed
           REPORTED ls_reported.
-        collect_result( EXPORTING iv_cid = ls_key-%cid is_failed = ls_failed is_reported = ls_reported
-                        IMPORTING ev_error = lv_eml_error
-                        CHANGING  cs_failed = failed cs_reported = reported ).
+        " [수정 #1] EML 결과를 action 결과로 옮김 (기존: collect_result 호출)
+        IF ls_failed-mng IS NOT INITIAL OR ls_failed-user IS NOT INITIAL.
+          lv_eml_error = abap_true.
+          APPEND VALUE #( %cid = ls_key-%cid ) TO failed-mng.
+        ENDIF.
+        LOOP AT ls_reported-mng INTO DATA(ls_rm3).
+          APPEND VALUE #( %cid = ls_key-%cid %msg = ls_rm3-%msg ) TO reported-mng.
+        ENDLOOP.
+        LOOP AT ls_reported-user INTO DATA(ls_ru3).
+          APPEND VALUE #( %cid = ls_key-%cid %msg = ls_ru3-%msg ) TO reported-mng.
+        ENDLOOP.
       ENDIF.
-    ENDLOOP.
-  ENDMETHOD.
-
-
-  METHOD collect_result.
-    CLEAR ev_error.
-    IF is_failed-mng IS NOT INITIAL OR is_failed-user IS NOT INITIAL.
-      ev_error = abap_true.
-      APPEND VALUE #( %cid = iv_cid ) TO cs_failed-mng.
-    ENDIF.
-    LOOP AT is_reported-mng INTO DATA(ls_rm).
-      APPEND VALUE #( %cid = iv_cid %msg = ls_rm-%msg ) TO cs_reported-mng.
-    ENDLOOP.
-    LOOP AT is_reported-user INTO DATA(ls_ru).
-      APPEND VALUE #( %cid = iv_cid %msg = ls_ru-%msg ) TO cs_reported-mng.
     ENDLOOP.
   ENDMETHOD.
 
