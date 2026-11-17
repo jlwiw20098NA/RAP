@@ -41,12 +41,15 @@ CLASS lhc_mng IMPLEMENTATION.
           lt_mng_db     TYPE TABLE FOR READ RESULT zmrmd_r_dtlitemmng\\mng,
           lt_usr_read   TYPE TABLE FOR READ IMPORT zmrmd_r_dtlitemmng\\user,
           lt_usr_db     TYPE TABLE FOR READ RESULT zmrmd_r_dtlitemmng\\user,
-          lt_chd_read   TYPE TABLE FOR READ IMPORT zmrmd_r_dtlitemmng\\mng\_user,
-          lt_chd_db     TYPE TABLE FOR READ RESULT zmrmd_r_dtlitemmng\\mng\_user,
+          " [수정 #3] 루트 association 파생 타입: zmrmd_r_dtlitemmng\\mng\_user → zmrmd_r_dtlitemmng\_user
+          lt_chd_read   TYPE TABLE FOR READ IMPORT zmrmd_r_dtlitemmng\_user,
+          lt_chd_db     TYPE TABLE FOR READ RESULT zmrmd_r_dtlitemmng\_user,
           lt_mng_create TYPE TABLE FOR CREATE zmrmd_r_dtlitemmng\\mng,
           lt_mng_update TYPE TABLE FOR UPDATE zmrmd_r_dtlitemmng\\mng,
           lt_mng_delete TYPE TABLE FOR DELETE zmrmd_r_dtlitemmng\\mng,
-          lt_usr_create TYPE TABLE FOR CREATE zmrmd_r_dtlitemmng\\mng\_user,
+          " [수정 #3] User 생성 테이블 분리 (%cid_ref = '' 섞어 쓰지 않음)
+          lt_usr_crt_new   TYPE TABLE FOR CREATE zmrmd_r_dtlitemmng\_user,   " 같은 요청에서 생성되는 Mng 아래 (%cid_ref)
+          lt_usr_crt_exist TYPE TABLE FOR CREATE zmrmd_r_dtlitemmng\_user,   " 기존 Mng 아래 (부모 키)
           lt_usr_delete TYPE TABLE FOR DELETE zmrmd_r_dtlitemmng\\user,
           ls_failed     TYPE RESPONSE FOR FAILED EARLY zmrmd_r_dtlitemmng,
           ls_reported   TYPE RESPONSE FOR REPORTED EARLY zmrmd_r_dtlitemmng,
@@ -58,7 +61,7 @@ CLASS lhc_mng IMPLEMENTATION.
 
     LOOP AT keys INTO DATA(ls_key).
       CLEAR: lt_mng_read, lt_mng_db, lt_usr_read, lt_usr_db, lt_chd_read, lt_chd_db,
-             lt_mng_create, lt_mng_update, lt_mng_delete, lt_usr_create, lt_usr_delete,
+             lt_mng_create, lt_mng_update, lt_mng_delete, lt_usr_crt_new, lt_usr_crt_exist, lt_usr_delete,
              ls_failed, ls_reported, lt_msg, lv_eml_error.
 
       DATA(lt_mng_in) = ls_key-%param-_Mng.
@@ -299,25 +302,27 @@ CLASS lhc_mng IMPLEMENTATION.
                 IF lv_ref IS INITIAL.
                   CONTINUE.   " 상위 Mng 생성이 이미 오류 처리된 경우
                 ENDIF.
-                READ TABLE lt_usr_create ASSIGNING FIELD-SYMBOL(<ls_uc>) WITH KEY %cid_ref = lv_ref.
+                " [수정 #3] 새 Mng 아래 담당자는 lt_usr_crt_new에만 (%cid_ref = 부모 %cid)
+                READ TABLE lt_usr_crt_new ASSIGNING FIELD-SYMBOL(<ls_un>) WITH KEY %cid_ref = lv_ref.
                 IF sy-subrc <> 0.
-                  APPEND VALUE #( %cid_ref = lv_ref ) TO lt_usr_create ASSIGNING <ls_uc>.
+                  APPEND VALUE #( %cid_ref = lv_ref ) TO lt_usr_crt_new ASSIGNING <ls_un>.
                 ENDIF.
+                APPEND VALUE #( %cid   = |USR{ lv_idx }|
+                                UserID = ls_u-UserID ) TO <ls_un>-%target.
               ELSE.
-                " 기존 Mng 아래 -> 상위 키로 연결
-                READ TABLE lt_usr_create ASSIGNING <ls_uc>
-                     WITH KEY %cid_ref             = ''
-                              CompanyCode           = ls_u-CompanyCode
+                " [수정 #3] 기존 Mng 아래 담당자는 lt_usr_crt_exist에만 (부모 키, %cid_ref 사용 안 함)
+                READ TABLE lt_usr_crt_exist ASSIGNING FIELD-SYMBOL(<ls_ue>)
+                     WITH KEY CompanyCode           = ls_u-CompanyCode
                               ItemGroupCode         = ls_u-ItemGroupCode
                               DetailedItemGroupCode = ls_u-DetailedItemGroupCode.
                 IF sy-subrc <> 0.
                   APPEND VALUE #( CompanyCode           = ls_u-CompanyCode
                                   ItemGroupCode         = ls_u-ItemGroupCode
-                                  DetailedItemGroupCode = ls_u-DetailedItemGroupCode ) TO lt_usr_create ASSIGNING <ls_uc>.
+                                  DetailedItemGroupCode = ls_u-DetailedItemGroupCode ) TO lt_usr_crt_exist ASSIGNING <ls_ue>.
                 ENDIF.
+                APPEND VALUE #( %cid   = |USR{ lv_idx }|
+                                UserID = ls_u-UserID ) TO <ls_ue>-%target.
               ENDIF.
-              APPEND VALUE #( %cid   = |USR{ lv_idx }|
-                              UserID = ls_u-UserID ) TO <ls_uc>-%target.
             ENDIF.
 
           WHEN c_status-delete.
@@ -353,7 +358,7 @@ CLASS lhc_mng IMPLEMENTATION.
 
       "==============================================================
       " 5. EML 실행 (같은 BO → 같은 LUW, 실패 시 전체 롤백)
-      "    순서: User 삭제 → Mng 생성·수정 + User 생성 → Mng 삭제
+      "    순서: User 삭제 → Mng 생성·수정 + 새 Mng 아래 User 생성 → 기존 Mng 아래 User 생성 → Mng 삭제
       "==============================================================
       " 5-1. User 삭제
       IF lt_usr_delete IS NOT INITIAL.
@@ -378,9 +383,9 @@ CLASS lhc_mng IMPLEMENTATION.
         ENDIF.
       ENDIF.
 
-      " 5-2. Mng 생성·수정 + User 생성
-      "      새 Mng 아래 User는 %cid_ref로 연결되므로 같은 MODIFY 문장 안에 있어야 함
-      IF lt_mng_create IS NOT INITIAL OR lt_mng_update IS NOT INITIAL OR lt_usr_create IS NOT INITIAL.
+      " 5-2. Mng 생성·수정 + 새 Mng 아래 User 생성
+      "      %cid_ref는 같은 MODIFY 문장 안의 부모 %cid를 가리켜야 하므로 Mng CREATE와 한 문장
+      IF lt_mng_create IS NOT INITIAL OR lt_mng_update IS NOT INITIAL OR lt_usr_crt_new IS NOT INITIAL.
         CLEAR: ls_failed, ls_reported.
         MODIFY ENTITIES OF zmrmd_r_dtlitemmng IN LOCAL MODE
           ENTITY Mng
@@ -390,7 +395,7 @@ CLASS lhc_mng IMPLEMENTATION.
             UPDATE FIELDS ( DetailedItemGroupName Remark )
               WITH lt_mng_update
             CREATE BY \_User FIELDS ( UserID )
-              WITH lt_usr_create
+              WITH lt_usr_crt_new          " [수정 #3] 새 Mng 아래만
           FAILED ls_failed
           REPORTED ls_reported.
         " [수정 #1] EML 결과를 action 결과로 옮김 (기존: collect_result 호출)
@@ -403,6 +408,30 @@ CLASS lhc_mng IMPLEMENTATION.
         ENDLOOP.
         LOOP AT ls_reported-user INTO DATA(ls_ru2).
           APPEND VALUE #( %cid = ls_key-%cid %msg = ls_ru2-%msg ) TO reported-mng.
+        ENDLOOP.
+        IF lv_eml_error = abap_true.
+          CONTINUE.
+        ENDIF.
+      ENDIF.
+
+      " [수정 #3] 5-2b. 기존 Mng 아래 User 생성 (부모 키로 연결, 별도 MODIFY 문장)
+      IF lt_usr_crt_exist IS NOT INITIAL.
+        CLEAR: ls_failed, ls_reported.
+        MODIFY ENTITIES OF zmrmd_r_dtlitemmng IN LOCAL MODE
+          ENTITY Mng
+            CREATE BY \_User FIELDS ( UserID )
+              WITH lt_usr_crt_exist
+          FAILED ls_failed
+          REPORTED ls_reported.
+        IF ls_failed-mng IS NOT INITIAL OR ls_failed-user IS NOT INITIAL.
+          lv_eml_error = abap_true.
+          APPEND VALUE #( %cid = ls_key-%cid ) TO failed-mng.
+        ENDIF.
+        LOOP AT ls_reported-mng INTO DATA(ls_rm2b).
+          APPEND VALUE #( %cid = ls_key-%cid %msg = ls_rm2b-%msg ) TO reported-mng.
+        ENDLOOP.
+        LOOP AT ls_reported-user INTO DATA(ls_ru2b).
+          APPEND VALUE #( %cid = ls_key-%cid %msg = ls_ru2b-%msg ) TO reported-mng.
         ENDLOOP.
         IF lv_eml_error = abap_true.
           CONTINUE.
