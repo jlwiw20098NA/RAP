@@ -1,0 +1,74 @@
+managed implementation in class zbp_mrmd_r_dtlitemmng unique;
+strict ( 2 );
+
+// ※ CRUD는 internal: 화면/API는 SaveAll(Status C/U/D)로만 저장 가능
+//   표준 POST/PATCH/DELETE로 규칙(하위 존재 시 삭제 금지 등)을 우회하지 못하게 막음
+
+define behavior for ZMRMD_R_DtlItemMng alias Mng
+persistent table ztmrmd00440          // TODO: 실제 테이블명
+lock master
+authorization master ( global )
+{
+  internal create;
+  internal update;
+  internal delete;
+  association _User { internal create; }
+
+  field ( readonly : update ) CompanyCode, ItemGroupCode, DetailedItemGroupCode;
+  field ( readonly ) CreatedDate, CreatedTime, ChangedDate, ChangedTime,
+                     CreatedTimeStamp, ChangedTimeStamp, CreatedBy, ChangedBy;
+
+  // 화면 진입점: Mng/User 행을 Status(C/U/D)와 함께 한 번에 처리
+  static action SaveAll deep parameter ZMRMD_A_DtlSaveReq;
+
+  // 생성/변경 일시·사용자
+  determination setCreateStamp on save { create; }
+  determination setChangeStamp on save { field DetailedItemGroupName, Remark; }
+
+  mapping for ztmrmd00440              // TODO: 오른쪽 컬럼명을 실제 컬럼명으로
+  {
+    CompanyCode           = bukrs;
+    ItemGroupCode         = item_group_code;
+    DetailedItemGroupCode = dtl_item_group_code;
+    DetailedItemGroupName = dtl_item_group_name;
+    Remark                = remark;
+    CreatedDate           = erdat;
+    CreatedTime           = erzet;
+    CreatedBy             = ernam;
+    ChangedDate           = aedat;
+    ChangedTime           = aezet;
+    ChangedBy             = aenam;
+    // CreatedTimeStamp, ChangedTimeStamp: 계산 필드라 매핑하지 않음
+  }
+}
+
+define behavior for ZMRMD_R_DtlItemUser alias User
+persistent table ztmrmd00441          // TODO: 실제 테이블명
+lock dependent by _Mng
+authorization dependent by _Mng
+{
+  // 사번은 키라 수정 대상이 없음 -> update 없음
+  internal delete;
+  association _Mng;
+
+  field ( readonly ) CompanyCode, ItemGroupCode, DetailedItemGroupCode;   // 부모 키에서 자동으로 채워짐
+  field ( readonly : update ) UserID;
+  field ( readonly ) CreatedDate, CreatedTime, ChangedDate, ChangedTime,
+                     CreatedTimeStamp, ChangedTimeStamp, CreatedBy, ChangedBy;
+
+  determination setCreateStamp on save { create; }
+
+  mapping for ztmrmd00441              // TODO: 오른쪽 컬럼명을 실제 컬럼명으로
+  {
+    CompanyCode           = bukrs;
+    ItemGroupCode         = item_group_code;
+    DetailedItemGroupCode = dtl_item_group_code;
+    UserID                = user_id;
+    CreatedDate           = erdat;
+    CreatedTime           = erzet;
+    CreatedBy             = ernam;
+    ChangedDate           = aedat;
+    ChangedTime           = aezet;
+    ChangedBy             = aenam;
+  }
+}
