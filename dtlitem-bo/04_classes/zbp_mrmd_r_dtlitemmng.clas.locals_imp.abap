@@ -53,7 +53,8 @@ CLASS lhc_mng IMPLEMENTATION.
           lt_msg        TYPE string_table,
           lv_idx        TYPE i,
           lv_has_child  TYPE abap_boolean,
-          lv_eml_error  TYPE abap_boolean.
+          lv_eml_error  TYPE abap_boolean,
+          lv_igc_valid  TYPE abap_boolean.   " [수정 #2] ItemGroupCode 공통코드 체크 결과
 
     LOOP AT keys INTO DATA(ls_key).
       CLEAR: lt_mng_read, lt_mng_db, lt_usr_read, lt_usr_db, lt_chd_read, lt_chd_db,
@@ -163,10 +164,24 @@ CLASS lhc_mng IMPLEMENTATION.
               APPEND |세부품목그룹 { lv_idx }번째: { ls_m-DetailedItemGroupCode }는 이미 존재합니다| TO lt_msg.
             ELSE.
               "▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
-              " [유효성 체크 위치 #1] ItemGroupCode
-              "  - ls_m-CompanyCode / ls_m-ItemGroupCode 가 유효한 품목그룹인지 확인
-              "  - 실패 시: APPEND |세부품목그룹 { lv_idx }번째: 품목그룹 { ls_m-ItemGroupCode }가
-              "             유효하지 않습니다| TO lt_msg.  그리고 아래 APPEND(생성 대상 추가)는 건너뜀
+              " [유효성 체크 #1] ItemGroupCode 공통코드 체크   ← [수정 #2] 2026-11-17 구현
+              "  공통코드(ZMRMD_I_ZTMRMD00740)에서
+              "  CodeClass = 'PQMD1010', UsedCheck = 'X', Attribute03 = 'SUB',
+              "  Attribute04 = 회사코드, Attribute041 = 품목그룹코드 인 행이 있어야 함
+              CLEAR lv_igc_valid.   " SELECT SINGLE은 못 찾으면 값을 안 바꾸므로 매 행 초기화
+              SELECT SINGLE @abap_true
+                FROM zmrmd_i_ztmrmd00740
+                WHERE CodeClass    = 'PQMD1010'
+                  AND UsedCheck    = 'X'
+                  AND Attribute03  = 'SUB'
+                  AND Attribute04  = @ls_m-CompanyCode
+                  AND Attribute041 = @ls_m-ItemGroupCode
+                INTO @lv_igc_valid.
+
+              IF lv_igc_valid = abap_false.
+                APPEND |[ItemGroupCode] { ls_m-ItemGroupCode } does not exist.| TO lt_msg.
+                CONTINUE.   " 생성 대상에 넣지 않고 다음 Mng 행으로
+              ENDIF.
               "▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
               "▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼

@@ -63,7 +63,7 @@ DB에 저장되지 않는다는 조건도 그대로 지켜집니다.
 
 | 번호 | 대상 | 위치 |
 |---|---|---|
-| #1 | ItemGroupCode | SaveAll → 2. Mng 행 처리 → `WHEN c_status-create` |
+| #1 | ItemGroupCode | **구현됨** — 공통코드 ZMRMD_I_ZTMRMD00740 (CodeClass PQMD1010, UsedCheck X, Attribute03 SUB, Attribute04 = 회사코드, Attribute041 = 품목그룹). 오류: `[ItemGroupCode] <값> does not exist.` |
 | #2 | DetailedItemGroupCode | SaveAll → 2. Mng 행 처리 → `WHEN c_status-create` |
 | #3 | UserID (담당자 사번) | SaveAll → 3. User 행 처리 → `WHEN c_status-create` |
 
