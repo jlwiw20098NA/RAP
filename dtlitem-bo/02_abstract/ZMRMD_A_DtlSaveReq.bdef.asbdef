@@ -1,0 +1,18 @@
+abstract;
+strict ( 2 );
+with hierarchy;
+
+// alias는 서비스 엔티티 이름(Mng, User)과 겹치지 않게 Param을 붙임
+define behavior for ZMRMD_A_DtlSaveReq alias ReqParam
+{
+  association _Mng;
+  association _User;
+}
+
+define behavior for ZMRMD_A_DtlSaveMng alias MngParam
+{
+}
+
+define behavior for ZMRMD_A_DtlSaveUser alias UserParam
+{
+}

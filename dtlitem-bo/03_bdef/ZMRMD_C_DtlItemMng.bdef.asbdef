@@ -1,0 +1,14 @@
+projection;
+strict ( 2 );
+
+// internal create/update/delete는 projection에서 노출할 수 없음 -> SaveAll만 노출
+define behavior for ZMRMD_C_DtlItemMng alias Mng
+{
+  use action SaveAll;
+  use association _User;
+}
+
+define behavior for ZMRMD_C_DtlItemUser alias User
+{
+  use association _Mng;
+}
