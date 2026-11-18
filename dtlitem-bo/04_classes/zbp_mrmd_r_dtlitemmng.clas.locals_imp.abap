@@ -59,9 +59,16 @@ CLASS lhc_mng IMPLEMENTATION.
           lv_has_child  TYPE abap_boolean,
           lv_eml_error  TYPE abap_boolean.
 
-    " [수정 #7] 루프 안 SELECT SINGLE 방식으로 복구 (한 요청 최대 10건 수준이라 충분)
-    "  FOR ALL ENTRIES 방식은 CHAR 40 컬럼과 타입을 맞추느라 코드가 더 복잡해져서 되돌림
-    DATA lv_igc_valid TYPE abap_boolean.   " ItemGroupCode 공통코드 체크 결과
+    " [수정 #8] ItemGroupCode 공통코드 체크: 내부 테이블 조인(FROM @itab) 방식
+    "  - 생성(C) 행의 키를 모아 공통코드와 한 번만 조인 (루프 안 SELECT SINGLE 제거)
+    "  - 결과를 화면 값과 같은 타입(bukrs, zdemr_item_grp_cd)으로 받아 루프 안에서 바로 비교
+    "  - ABAP 7.52 이상 + HANA 필요
+    TYPES: BEGIN OF ty_igc_key,
+             CompanyCode   TYPE bukrs,
+             ItemGroupCode TYPE zdemr_item_grp_cd,
+           END OF ty_igc_key.
+    DATA lt_igc_key TYPE STANDARD TABLE OF ty_igc_key WITH EMPTY KEY.                    " 조회 키 (생성 행)
+    DATA lt_igc_ok  TYPE SORTED TABLE OF ty_igc_key WITH UNIQUE KEY CompanyCode ItemGroupCode. " 유효한 조합
 
     LOOP AT keys INTO DATA(ls_key).
       CLEAR: lt_mng_read, lt_mng_db, lt_usr_read, lt_usr_db, lt_chd_read, lt_chd_db,
@@ -154,6 +161,27 @@ CLASS lhc_mng IMPLEMENTATION.
           RESULT lt_chd_db.
       ENDIF.
 
+      " [수정 #8] 1-4. ItemGroupCode 공통코드를 루프 전에 한 번에 조회 (내부 테이블 조인)
+      lt_igc_key = VALUE #( FOR m IN lt_mng_in WHERE ( Status = c_status-create )
+                            ( CompanyCode   = m-CompanyCode
+                              ItemGroupCode = m-ItemGroupCode ) ).
+
+      CLEAR lt_igc_ok.   " 생성 행이 없어 조회를 건너뛸 때 이전 회차 값이 남지 않도록
+      IF lt_igc_key IS NOT INITIAL.
+        SELECT DISTINCT d~CompanyCode, d~ItemGroupCode
+          FROM @lt_igc_key AS d
+          INNER JOIN zmrmd_i_ztmrmd00740 AS c
+            ON  c~Attribute04  = d~CompanyCode       " CHAR 40 = bukrs (문자 타입끼리 비교)
+            AND c~Attribute041 = d~ItemGroupCode     " CHAR 40 = zdemr_item_grp_cd
+          WHERE c~CodeClass   = 'PQMD1010'
+            AND c~UsedCheck   = 'X'
+            AND c~Attribute03 = 'SUB'
+          INTO TABLE @lt_igc_ok.
+        " ON 절 타입 비교 오류가 나면 아래처럼 CAST로 맞추세요
+        "   ON  c~Attribute04  = CAST( d~CompanyCode   AS CHAR( 40 ) )
+        "   AND c~Attribute041 = CAST( d~ItemGroupCode AS CHAR( 40 ) )
+      ENDIF.
+
       "==============================================================
       " 2. Mng 행 처리
       "==============================================================
@@ -175,19 +203,9 @@ CLASS lhc_mng IMPLEMENTATION.
               "  공통코드(ZMRMD_I_ZTMRMD00740)에서
               "  CodeClass = 'PQMD1010', UsedCheck = 'X', Attribute03 = 'SUB',
               "  Attribute04 = 회사코드, Attribute041 = 품목그룹코드 인 행이 있어야 함
-              " [수정 #7] 행마다 SELECT SINGLE (한 요청 최대 10건 → DB 호출 최대 10회)
-              "  WHERE의 호스트 변수 비교는 길이가 달라도 됨 (CHAR 4/10 → CHAR 40 컬럼 비교 가능)
-              CLEAR lv_igc_valid.   " SELECT SINGLE은 못 찾으면 값을 안 바꾸므로 매 행 초기화
-              SELECT SINGLE @abap_true
-                FROM zmrmd_i_ztmrmd00740
-                WHERE CodeClass    = 'PQMD1010'
-                  AND UsedCheck    = 'X'
-                  AND Attribute03  = 'SUB'
-                  AND Attribute04  = @ls_m-CompanyCode
-                  AND Attribute041 = @ls_m-ItemGroupCode
-                INTO @lv_igc_valid.
-
-              IF lv_igc_valid = abap_false.
+              " [수정 #8] 루프 안 SELECT SINGLE → 1-4에서 조인한 결과로 판단 (같은 타입끼리 비교)
+              IF NOT line_exists( lt_igc_ok[ CompanyCode   = ls_m-CompanyCode
+                                             ItemGroupCode = ls_m-ItemGroupCode ] ).
                 APPEND |[ItemGroupCode] { ls_m-ItemGroupCode } does not exist.| TO lt_msg.
                 CONTINUE.   " 생성 대상에 넣지 않고 다음 Mng 행으로
               ENDIF.
