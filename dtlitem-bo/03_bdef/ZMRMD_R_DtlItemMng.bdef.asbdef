@@ -47,7 +47,11 @@ persistent table ztmrmd00441          // TODO: 실제 테이블명
 lock dependent by _Mng
 authorization dependent by _Mng
 {
-  // 사번은 키라 수정 대상이 없음 -> update 없음
+  // [수정 #4] internal update 추가
+  //  사번은 키라 업무상 수정은 없지만, determination(setCreateStamp)이
+  //  MODIFY ... UPDATE FIELDS ( CreatedDate CreatedTime CreatedBy )로 값을 채우려면 update 동작이 정의돼 있어야 함
+  //  internal이라 API/외부 EML로는 수정 불가 (SaveAll의 Status U는 여전히 오류 처리)
+  internal update;
   internal delete;
   association _Mng;
 
