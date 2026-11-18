@@ -65,6 +65,11 @@ CLASS lhc_mng IMPLEMENTATION.
              Attribute041 TYPE zmrmd_i_ztmrmd00740-Attribute041,
            END OF ty_igc.
     DATA lt_igc_valid TYPE SORTED TABLE OF ty_igc WITH UNIQUE KEY Attribute04 Attribute041.
+    " [수정 #6] FOR ALL ENTRIES 기준 테이블: 컬럼과 같은 타입(CHAR 40)으로 맞춘 조회 키
+    "  CompanyCode(bukrs, CHAR 4), ItemGroupCode(zdemr_item_grp_cd, CHAR 10)를
+    "  Attribute04/041(CHAR 40)과 바로 비교하면 타입 불일치 오류 → CHAR 40으로 옮겨 담아 비교
+    DATA lt_igc_key   TYPE STANDARD TABLE OF ty_igc WITH EMPTY KEY.
+    DATA ls_igc_chk   TYPE ty_igc.
 
     LOOP AT keys INTO DATA(ls_key).
       CLEAR: lt_mng_read, lt_mng_db, lt_usr_read, lt_usr_db, lt_chd_read, lt_chd_db,
@@ -160,19 +165,23 @@ CLASS lhc_mng IMPLEMENTATION.
       " [수정 #5] 1-4. ItemGroupCode 공통코드를 루프 전에 한 번에 조회
       "  - 기존: Mng 행마다 SELECT SINGLE (행 수만큼 DB 호출)
       "  - 변경: 생성(C) 행의 (회사코드, 품목그룹) 조합을 모아 SELECT 1회
-      DATA(lt_mng_c) = lt_mng_in.
-      DELETE lt_mng_c WHERE Status <> c_status-create.
+      " [수정 #6] 생성(C) 행의 키를 CHAR 40 구조로 옮겨 담음 (대입 시 자동으로 왼쪽 정렬 + 공백 채움)
+      lt_igc_key = VALUE #( FOR m IN lt_mng_in WHERE ( Status = c_status-create )
+                            ( Attribute04  = m-CompanyCode
+                              Attribute041 = m-ItemGroupCode ) ).
+      SORT lt_igc_key BY Attribute04 Attribute041.
+      DELETE ADJACENT DUPLICATES FROM lt_igc_key COMPARING Attribute04 Attribute041.
 
       CLEAR lt_igc_valid.   " 생성 행이 없어 SELECT를 건너뛸 때 이전 회차 값이 남지 않도록
-      IF lt_mng_c IS NOT INITIAL.   " FOR ALL ENTRIES는 빈 테이블이면 조건이 무시되어 전체를 읽으므로 필수
+      IF lt_igc_key IS NOT INITIAL.   " FOR ALL ENTRIES는 빈 테이블이면 조건이 무시되어 전체를 읽으므로 필수
         SELECT DISTINCT Attribute04, Attribute041
           FROM zmrmd_i_ztmrmd00740
-          FOR ALL ENTRIES IN @lt_mng_c
+          FOR ALL ENTRIES IN @lt_igc_key
           WHERE CodeClass    = 'PQMD1010'
             AND UsedCheck    = 'X'
             AND Attribute03  = 'SUB'
-            AND Attribute04  = @lt_mng_c-CompanyCode
-            AND Attribute041 = @lt_mng_c-ItemGroupCode
+            AND Attribute04  = @lt_igc_key-Attribute04     " [수정 #6] CHAR 40 = CHAR 40
+            AND Attribute041 = @lt_igc_key-Attribute041    " [수정 #6] CHAR 40 = CHAR 40
           INTO TABLE @lt_igc_valid.
       ENDIF.
 
@@ -198,8 +207,11 @@ CLASS lhc_mng IMPLEMENTATION.
               "  CodeClass = 'PQMD1010', UsedCheck = 'X', Attribute03 = 'SUB',
               "  Attribute04 = 회사코드, Attribute041 = 품목그룹코드 인 행이 있어야 함
               " [수정 #5] 루프 안 SELECT SINGLE → 1-4에서 조회한 결과로 판단
-              IF NOT line_exists( lt_igc_valid[ Attribute04  = ls_m-CompanyCode
-                                                Attribute041 = ls_m-ItemGroupCode ] ).
+              " [수정 #6] 비교 값도 CHAR 40 구조로 맞춘 뒤 정렬 테이블 키로 검색
+              ls_igc_chk = VALUE #( Attribute04  = ls_m-CompanyCode
+                                    Attribute041 = ls_m-ItemGroupCode ).
+              IF NOT line_exists( lt_igc_valid[ Attribute04  = ls_igc_chk-Attribute04
+                                                Attribute041 = ls_igc_chk-Attribute041 ] ).
                 APPEND |[ItemGroupCode] { ls_m-ItemGroupCode } does not exist.| TO lt_msg.
                 CONTINUE.   " 생성 대상에 넣지 않고 다음 Mng 행으로
               ENDIF.
