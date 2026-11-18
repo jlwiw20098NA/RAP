@@ -41,15 +41,16 @@ CLASS lhc_mng IMPLEMENTATION.
           lt_mng_db     TYPE TABLE FOR READ RESULT zmrmd_r_dtlitemmng\\mng,
           lt_usr_read   TYPE TABLE FOR READ IMPORT zmrmd_r_dtlitemmng\\user,
           lt_usr_db     TYPE TABLE FOR READ RESULT zmrmd_r_dtlitemmng\\user,
-          " [수정 #3] 루트 association 파생 타입: zmrmd_r_dtlitemmng\\mng\_user → zmrmd_r_dtlitemmng\_user
-          lt_chd_read   TYPE TABLE FOR READ IMPORT zmrmd_r_dtlitemmng\_user,
-          lt_chd_db     TYPE TABLE FOR READ RESULT zmrmd_r_dtlitemmng\_user,
+          " [수정 #7] association 파생 타입을 다른 선언(\\mng, \\user)과 같은 형태로 통일
+          "  활성화 오류가 나면 루트 전용 짧은 형태 zmrmd_r_dtlitemmng\_user로 되돌리세요 (같은 타입)
+          lt_chd_read   TYPE TABLE FOR READ IMPORT zmrmd_r_dtlitemmng\\mng\_user,
+          lt_chd_db     TYPE TABLE FOR READ RESULT zmrmd_r_dtlitemmng\\mng\_user,
           lt_mng_create TYPE TABLE FOR CREATE zmrmd_r_dtlitemmng\\mng,
           lt_mng_update TYPE TABLE FOR UPDATE zmrmd_r_dtlitemmng\\mng,
           lt_mng_delete TYPE TABLE FOR DELETE zmrmd_r_dtlitemmng\\mng,
           " [수정 #3] User 생성 테이블 분리 (%cid_ref = '' 섞어 쓰지 않음)
-          lt_usr_crt_new   TYPE TABLE FOR CREATE zmrmd_r_dtlitemmng\_user,   " 같은 요청에서 생성되는 Mng 아래 (%cid_ref)
-          lt_usr_crt_exist TYPE TABLE FOR CREATE zmrmd_r_dtlitemmng\_user,   " 기존 Mng 아래 (부모 키)
+          lt_usr_crt_new   TYPE TABLE FOR CREATE zmrmd_r_dtlitemmng\\mng\_user,   " 같은 요청에서 생성되는 Mng 아래 (%cid_ref)
+          lt_usr_crt_exist TYPE TABLE FOR CREATE zmrmd_r_dtlitemmng\\mng\_user,   " 기존 Mng 아래 (부모 키)
           lt_usr_delete TYPE TABLE FOR DELETE zmrmd_r_dtlitemmng\\user,
           ls_failed     TYPE RESPONSE FOR FAILED EARLY zmrmd_r_dtlitemmng,
           ls_reported   TYPE RESPONSE FOR REPORTED EARLY zmrmd_r_dtlitemmng,
@@ -58,18 +59,9 @@ CLASS lhc_mng IMPLEMENTATION.
           lv_has_child  TYPE abap_boolean,
           lv_eml_error  TYPE abap_boolean.
 
-    " [수정 #5] lv_igc_valid 제거 → 1-4에서 미리 조회한 lt_igc_valid로 판단
-    "  유효한 (회사코드, 품목그룹) 조합. 정렬 테이블이라 키 검색이 빠름
-    TYPES: BEGIN OF ty_igc,
-             Attribute04  TYPE zmrmd_i_ztmrmd00740-Attribute04,
-             Attribute041 TYPE zmrmd_i_ztmrmd00740-Attribute041,
-           END OF ty_igc.
-    DATA lt_igc_valid TYPE SORTED TABLE OF ty_igc WITH UNIQUE KEY Attribute04 Attribute041.
-    " [수정 #6] FOR ALL ENTRIES 기준 테이블: 컬럼과 같은 타입(CHAR 40)으로 맞춘 조회 키
-    "  CompanyCode(bukrs, CHAR 4), ItemGroupCode(zdemr_item_grp_cd, CHAR 10)를
-    "  Attribute04/041(CHAR 40)과 바로 비교하면 타입 불일치 오류 → CHAR 40으로 옮겨 담아 비교
-    DATA lt_igc_key   TYPE STANDARD TABLE OF ty_igc WITH EMPTY KEY.
-    DATA ls_igc_chk   TYPE ty_igc.
+    " [수정 #7] 루프 안 SELECT SINGLE 방식으로 복구 (한 요청 최대 10건 수준이라 충분)
+    "  FOR ALL ENTRIES 방식은 CHAR 40 컬럼과 타입을 맞추느라 코드가 더 복잡해져서 되돌림
+    DATA lv_igc_valid TYPE abap_boolean.   " ItemGroupCode 공통코드 체크 결과
 
     LOOP AT keys INTO DATA(ls_key).
       CLEAR: lt_mng_read, lt_mng_db, lt_usr_read, lt_usr_db, lt_chd_read, lt_chd_db,
@@ -162,29 +154,6 @@ CLASS lhc_mng IMPLEMENTATION.
           RESULT lt_chd_db.
       ENDIF.
 
-      " [수정 #5] 1-4. ItemGroupCode 공통코드를 루프 전에 한 번에 조회
-      "  - 기존: Mng 행마다 SELECT SINGLE (행 수만큼 DB 호출)
-      "  - 변경: 생성(C) 행의 (회사코드, 품목그룹) 조합을 모아 SELECT 1회
-      " [수정 #6] 생성(C) 행의 키를 CHAR 40 구조로 옮겨 담음 (대입 시 자동으로 왼쪽 정렬 + 공백 채움)
-      lt_igc_key = VALUE #( FOR m IN lt_mng_in WHERE ( Status = c_status-create )
-                            ( Attribute04  = m-CompanyCode
-                              Attribute041 = m-ItemGroupCode ) ).
-      SORT lt_igc_key BY Attribute04 Attribute041.
-      DELETE ADJACENT DUPLICATES FROM lt_igc_key COMPARING Attribute04 Attribute041.
-
-      CLEAR lt_igc_valid.   " 생성 행이 없어 SELECT를 건너뛸 때 이전 회차 값이 남지 않도록
-      IF lt_igc_key IS NOT INITIAL.   " FOR ALL ENTRIES는 빈 테이블이면 조건이 무시되어 전체를 읽으므로 필수
-        SELECT DISTINCT Attribute04, Attribute041
-          FROM zmrmd_i_ztmrmd00740
-          FOR ALL ENTRIES IN @lt_igc_key
-          WHERE CodeClass    = 'PQMD1010'
-            AND UsedCheck    = 'X'
-            AND Attribute03  = 'SUB'
-            AND Attribute04  = @lt_igc_key-Attribute04     " [수정 #6] CHAR 40 = CHAR 40
-            AND Attribute041 = @lt_igc_key-Attribute041    " [수정 #6] CHAR 40 = CHAR 40
-          INTO TABLE @lt_igc_valid.
-      ENDIF.
-
       "==============================================================
       " 2. Mng 행 처리
       "==============================================================
@@ -206,12 +175,19 @@ CLASS lhc_mng IMPLEMENTATION.
               "  공통코드(ZMRMD_I_ZTMRMD00740)에서
               "  CodeClass = 'PQMD1010', UsedCheck = 'X', Attribute03 = 'SUB',
               "  Attribute04 = 회사코드, Attribute041 = 품목그룹코드 인 행이 있어야 함
-              " [수정 #5] 루프 안 SELECT SINGLE → 1-4에서 조회한 결과로 판단
-              " [수정 #6] 비교 값도 CHAR 40 구조로 맞춘 뒤 정렬 테이블 키로 검색
-              ls_igc_chk = VALUE #( Attribute04  = ls_m-CompanyCode
-                                    Attribute041 = ls_m-ItemGroupCode ).
-              IF NOT line_exists( lt_igc_valid[ Attribute04  = ls_igc_chk-Attribute04
-                                                Attribute041 = ls_igc_chk-Attribute041 ] ).
+              " [수정 #7] 행마다 SELECT SINGLE (한 요청 최대 10건 → DB 호출 최대 10회)
+              "  WHERE의 호스트 변수 비교는 길이가 달라도 됨 (CHAR 4/10 → CHAR 40 컬럼 비교 가능)
+              CLEAR lv_igc_valid.   " SELECT SINGLE은 못 찾으면 값을 안 바꾸므로 매 행 초기화
+              SELECT SINGLE @abap_true
+                FROM zmrmd_i_ztmrmd00740
+                WHERE CodeClass    = 'PQMD1010'
+                  AND UsedCheck    = 'X'
+                  AND Attribute03  = 'SUB'
+                  AND Attribute04  = @ls_m-CompanyCode
+                  AND Attribute041 = @ls_m-ItemGroupCode
+                INTO @lv_igc_valid.
+
+              IF lv_igc_valid = abap_false.
                 APPEND |[ItemGroupCode] { ls_m-ItemGroupCode } does not exist.| TO lt_msg.
                 CONTINUE.   " 생성 대상에 넣지 않고 다음 Mng 행으로
               ENDIF.
