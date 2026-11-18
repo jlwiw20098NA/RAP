@@ -56,8 +56,15 @@ CLASS lhc_mng IMPLEMENTATION.
           lt_msg        TYPE string_table,
           lv_idx        TYPE i,
           lv_has_child  TYPE abap_boolean,
-          lv_eml_error  TYPE abap_boolean,
-          lv_igc_valid  TYPE abap_boolean.   " [수정 #2] ItemGroupCode 공통코드 체크 결과
+          lv_eml_error  TYPE abap_boolean.
+
+    " [수정 #5] lv_igc_valid 제거 → 1-4에서 미리 조회한 lt_igc_valid로 판단
+    "  유효한 (회사코드, 품목그룹) 조합. 정렬 테이블이라 키 검색이 빠름
+    TYPES: BEGIN OF ty_igc,
+             Attribute04  TYPE zmrmd_i_ztmrmd00740-Attribute04,
+             Attribute041 TYPE zmrmd_i_ztmrmd00740-Attribute041,
+           END OF ty_igc.
+    DATA lt_igc_valid TYPE SORTED TABLE OF ty_igc WITH UNIQUE KEY Attribute04 Attribute041.
 
     LOOP AT keys INTO DATA(ls_key).
       CLEAR: lt_mng_read, lt_mng_db, lt_usr_read, lt_usr_db, lt_chd_read, lt_chd_db,
@@ -150,6 +157,25 @@ CLASS lhc_mng IMPLEMENTATION.
           RESULT lt_chd_db.
       ENDIF.
 
+      " [수정 #5] 1-4. ItemGroupCode 공통코드를 루프 전에 한 번에 조회
+      "  - 기존: Mng 행마다 SELECT SINGLE (행 수만큼 DB 호출)
+      "  - 변경: 생성(C) 행의 (회사코드, 품목그룹) 조합을 모아 SELECT 1회
+      DATA(lt_mng_c) = lt_mng_in.
+      DELETE lt_mng_c WHERE Status <> c_status-create.
+
+      CLEAR lt_igc_valid.   " 생성 행이 없어 SELECT를 건너뛸 때 이전 회차 값이 남지 않도록
+      IF lt_mng_c IS NOT INITIAL.   " FOR ALL ENTRIES는 빈 테이블이면 조건이 무시되어 전체를 읽으므로 필수
+        SELECT DISTINCT Attribute04, Attribute041
+          FROM zmrmd_i_ztmrmd00740
+          FOR ALL ENTRIES IN @lt_mng_c
+          WHERE CodeClass    = 'PQMD1010'
+            AND UsedCheck    = 'X'
+            AND Attribute03  = 'SUB'
+            AND Attribute04  = @lt_mng_c-CompanyCode
+            AND Attribute041 = @lt_mng_c-ItemGroupCode
+          INTO TABLE @lt_igc_valid.
+      ENDIF.
+
       "==============================================================
       " 2. Mng 행 처리
       "==============================================================
@@ -171,17 +197,9 @@ CLASS lhc_mng IMPLEMENTATION.
               "  공통코드(ZMRMD_I_ZTMRMD00740)에서
               "  CodeClass = 'PQMD1010', UsedCheck = 'X', Attribute03 = 'SUB',
               "  Attribute04 = 회사코드, Attribute041 = 품목그룹코드 인 행이 있어야 함
-              CLEAR lv_igc_valid.   " SELECT SINGLE은 못 찾으면 값을 안 바꾸므로 매 행 초기화
-              SELECT SINGLE @abap_true
-                FROM zmrmd_i_ztmrmd00740
-                WHERE CodeClass    = 'PQMD1010'
-                  AND UsedCheck    = 'X'
-                  AND Attribute03  = 'SUB'
-                  AND Attribute04  = @ls_m-CompanyCode
-                  AND Attribute041 = @ls_m-ItemGroupCode
-                INTO @lv_igc_valid.
-
-              IF lv_igc_valid = abap_false.
+              " [수정 #5] 루프 안 SELECT SINGLE → 1-4에서 조회한 결과로 판단
+              IF NOT line_exists( lt_igc_valid[ Attribute04  = ls_m-CompanyCode
+                                                Attribute041 = ls_m-ItemGroupCode ] ).
                 APPEND |[ItemGroupCode] { ls_m-ItemGroupCode } does not exist.| TO lt_msg.
                 CONTINUE.   " 생성 대상에 넣지 않고 다음 Mng 행으로
               ENDIF.
