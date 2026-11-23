@@ -38,7 +38,7 @@ CLASS lhc_matsup IMPLEMENTATION.
           lt_db        TYPE TABLE FOR READ RESULT zmrmd_r_matsupdemmastersave\\matsup,
           lt_create    TYPE TABLE FOR CREATE zmrmd_r_matsupdemmastersave\\matsup,
           lt_update    TYPE TABLE FOR UPDATE zmrmd_r_matsupdemmastersave\\matsup,
-          lt_delete    TYPE TABLE FOR DELETE zmrmd_r_matsupdemmastersave\\matsup,
+          ls_db        TYPE STRUCTURE FOR READ RESULT zmrmd_r_matsupdemmastersave\\matsup,   " [수정 #3] lt_delete 제거
           ls_failed    TYPE RESPONSE FOR FAILED EARLY zmrmd_r_matsupdemmastersave,
           ls_reported  TYPE RESPONSE FOR REPORTED EARLY zmrmd_r_matsupdemmastersave,
           lt_msg       TYPE string_table,
@@ -47,7 +47,7 @@ CLASS lhc_matsup IMPLEMENTATION.
           lv_found     TYPE abap_boolean.
 
     LOOP AT keys INTO DATA(ls_key).
-      CLEAR: lt_read, lt_db, lt_create, lt_update, lt_delete,
+      CLEAR: lt_read, lt_db, lt_create, lt_update,
              ls_failed, ls_reported, lt_msg.
 
       DATA(lt_in) = ls_key-%param-_Row.
@@ -82,7 +82,7 @@ CLASS lhc_matsup IMPLEMENTATION.
       IF lt_read IS NOT INITIAL.
         READ ENTITIES OF zmrmd_r_matsupdemmastersave IN LOCAL MODE
           ENTITY MatSup
-          FIELDS ( SupplyRatio Remark )
+          FIELDS ( SupplyRatio Remark DeletionIndicator )   " [수정 #3]
           WITH lt_read
           RESULT lt_db.
       ENDIF.
@@ -117,11 +117,15 @@ CLASS lhc_matsup IMPLEMENTATION.
           CONTINUE.
         ENDIF.
 
-        DATA(lv_exists) = xsdbool( line_exists(
-          lt_db[ KEY id COMPONENTS CompanyCode   = ls_in-CompanyCode
-                                   Material      = ls_in-Material
-                                   Supplier      = ls_in-Supplier
-                                   GoodsSupplier = ls_in-GoodsSupplier ] ) ).
+        " [수정 #3] 존재 여부 + 삭제(삭제지시자 X) 여부
+        CLEAR ls_db.
+        READ TABLE lt_db INTO ls_db
+             WITH KEY id COMPONENTS CompanyCode   = ls_in-CompanyCode
+                                    Material      = ls_in-Material
+                                    Supplier      = ls_in-Supplier
+                                    GoodsSupplier = ls_in-GoodsSupplier.
+        DATA(lv_exists)  = xsdbool( sy-subrc = 0 ).
+        DATA(lv_deleted) = xsdbool( lv_exists = abap_true AND ls_db-DeletionIndicator = abap_true ).
 
         CASE ls_in-Status.
 
@@ -130,7 +134,11 @@ CLASS lhc_matsup IMPLEMENTATION.
           "----------------------------------------------------------
           WHEN c_status-create.
             " 중복 데이터 체크 (00410 키 기준)
-            IF lv_exists = abap_true.
+            IF lv_deleted = abap_true.   " [수정 #3] 삭제된 데이터도 키가 남아 있어 재등록 불가
+              APPEND |{ lv_idx }번째 행: 삭제된 데이터와 키가 같아 등록할 수 없습니다 | &&
+                     |({ ls_in-CompanyCode }/{ ls_in-Material }/{ ls_in-Supplier }/{ ls_in-GoodsSupplier })| TO lt_msg.
+              CONTINUE.
+            ELSEIF lv_exists = abap_true.
               APPEND |{ lv_idx }번째 행: 이미 등록된 데이터입니다 | &&
                      |({ ls_in-CompanyCode }/{ ls_in-Material }/{ ls_in-Supplier }/{ ls_in-GoodsSupplier })| TO lt_msg.
               CONTINUE.
@@ -201,15 +209,23 @@ CLASS lhc_matsup IMPLEMENTATION.
                      |({ ls_in-CompanyCode }/{ ls_in-Material }/{ ls_in-Supplier }/{ ls_in-GoodsSupplier })| TO lt_msg.
               CONTINUE.
             ENDIF.
-            APPEND VALUE #( CompanyCode   = ls_in-CompanyCode
-                            Material      = ls_in-Material
-                            Supplier      = ls_in-Supplier
-                            GoodsSupplier = ls_in-GoodsSupplier
-                            SupplyRatio   = ls_in-SupplyRatio
-                            Remark        = ls_in-Remark ) TO lt_update.
+            IF lv_deleted = abap_true.   " [수정 #3]
+              APPEND |{ lv_idx }번째 행: 삭제된 데이터는 수정할 수 없습니다 | &&
+                     |({ ls_in-CompanyCode }/{ ls_in-Material }/{ ls_in-Supplier }/{ ls_in-GoodsSupplier })| TO lt_msg.
+              CONTINUE.
+            ENDIF.
+            " [수정 #3] U와 D가 같은 update 테이블을 쓰므로 바꿀 필드를 %control로 직접 지정
+            APPEND VALUE #( CompanyCode          = ls_in-CompanyCode
+                            Material             = ls_in-Material
+                            Supplier             = ls_in-Supplier
+                            GoodsSupplier        = ls_in-GoodsSupplier
+                            SupplyRatio          = ls_in-SupplyRatio
+                            Remark               = ls_in-Remark
+                            %control-SupplyRatio = if_abap_behv=>mk-on
+                            %control-Remark      = if_abap_behv=>mk-on ) TO lt_update.
 
           "----------------------------------------------------------
-          " D: 삭제
+          " D: 소프트 삭제 (데이터는 남기고 삭제지시자만 'X')   [수정 #3]
           "----------------------------------------------------------
           WHEN c_status-delete.
             IF lv_exists = abap_false.
@@ -217,10 +233,17 @@ CLASS lhc_matsup IMPLEMENTATION.
                      |({ ls_in-CompanyCode }/{ ls_in-Material }/{ ls_in-Supplier }/{ ls_in-GoodsSupplier })| TO lt_msg.
               CONTINUE.
             ENDIF.
-            APPEND VALUE #( CompanyCode   = ls_in-CompanyCode
-                            Material      = ls_in-Material
-                            Supplier      = ls_in-Supplier
-                            GoodsSupplier = ls_in-GoodsSupplier ) TO lt_delete.
+            IF lv_deleted = abap_true.
+              APPEND |{ lv_idx }번째 행: 이미 삭제된 데이터입니다 | &&
+                     |({ ls_in-CompanyCode }/{ ls_in-Material }/{ ls_in-Supplier }/{ ls_in-GoodsSupplier })| TO lt_msg.
+              CONTINUE.
+            ENDIF.
+            APPEND VALUE #( CompanyCode                = ls_in-CompanyCode
+                            Material                   = ls_in-Material
+                            Supplier                   = ls_in-Supplier
+                            GoodsSupplier              = ls_in-GoodsSupplier
+                            DeletionIndicator          = abap_true
+                            %control-DeletionIndicator = if_abap_behv=>mk-on ) TO lt_update.
 
           WHEN OTHERS.
             APPEND |{ lv_idx }번째 행: Status '{ ls_in-Status }'는 허용되지 않습니다 (C/U/D)| TO lt_msg.
@@ -244,14 +267,13 @@ CLASS lhc_matsup IMPLEMENTATION.
       "==============================================================
       " 4. EML 실행 (00410은 managed가 저장, 00420은 saver의 save_modified가 저장)
       "==============================================================
-      IF lt_create IS NOT INITIAL OR lt_update IS NOT INITIAL OR lt_delete IS NOT INITIAL.
+      IF lt_create IS NOT INITIAL OR lt_update IS NOT INITIAL.
         MODIFY ENTITIES OF zmrmd_r_matsupdemmastersave IN LOCAL MODE
           ENTITY MatSup
             CREATE FIELDS ( CompanyCode Material Supplier GoodsSupplier SupplyRatio Remark )
               WITH lt_create
-            UPDATE FIELDS ( SupplyRatio Remark )
-              WITH lt_update
-            DELETE FROM lt_delete
+            UPDATE FROM lt_update          " [수정 #3] U(SupplyRatio·Remark) + D(삭제지시자). 바꿀 필드는 %control로 지정
+                                           "  기존: UPDATE FIELDS ( SupplyRatio Remark ) + DELETE FROM lt_delete
           FAILED ls_failed
           REPORTED ls_reported.
 
@@ -312,7 +334,7 @@ CLASS lsc_matsup IMPLEMENTATION.
     "================================================================
     " 00420 저장 (00410 저장과 같은 트랜잭션 → COMMIT은 프레임워크가 함)
     "  C/U: 최종 상태를 로그 행으로 INSERT (TimeStamp = 저장 시각, UTC)   [수정 #2]
-    "  D: 삭제지시자 공백인 로그 행에 'X' (변경 없음)
+    "  D: 물리 삭제 없음. 00410 삭제지시자 'X' → 이전 로그 행 'X' + 새 로그 행(X) 생성   [수정 #3]
     "  ※ 이 단계는 실패시킬 수 없으므로 검증은 모두 SaveAll에서 끝냄
     "  생성/변경 일시·사용자(ERDAT/ERZET/ERNAM, AEDAT/AEZET/AENAM)도 함께 기록   [수정 #1]
     "  TODO: 테이블명(ztmrmd00420)과 컬럼명을 실제 값으로 맞추세요
@@ -345,6 +367,28 @@ CLASS lsc_matsup IMPLEMENTATION.
         ALL FIELDS WITH lt_keys
         RESULT DATA(lt_rows).
 
+      " [수정 #3] 소프트 삭제(이번에 삭제지시자가 'X'로 바뀐 행): 이전 로그 행에도 'X'를 찍음 (기존 D 로직 유지)
+      LOOP AT update-matsup INTO DATA(ls_d)
+           WHERE %control-DeletionIndicator = if_abap_behv=>mk-on
+             AND DeletionIndicator          = abap_true.
+        READ TABLE lt_rows INTO DATA(ls_r)
+             WITH KEY id COMPONENTS CompanyCode   = ls_d-CompanyCode
+                                    Material      = ls_d-Material
+                                    Supplier      = ls_d-Supplier
+                                    GoodsSupplier = ls_d-GoodsSupplier.
+        UPDATE ztmrmd00420
+          SET del_ind = 'X',
+              aedat   = @ls_r-ChangedDate,
+              aezet   = @ls_r-ChangedTime,
+              aenam   = @ls_r-ChangedBy
+          WHERE bukrs       = @ls_d-CompanyCode
+            AND matnr       = @ls_d-Material
+            AND lifnr       = @ls_d-Supplier
+            AND goods_lifnr = @ls_d-GoodsSupplier
+            AND del_ind     = @space.
+      ENDLOOP.
+
+      " C/U(소프트 삭제 포함) 최종 상태를 새 로그 행으로 INSERT
       lt_hist = VALUE #( FOR r IN lt_rows
                          ( bukrs        = r-CompanyCode
                            matnr        = r-Material
@@ -359,29 +403,13 @@ CLASS lsc_matsup IMPLEMENTATION.
                            aedat        = r-ChangedDate
                            aezet        = r-ChangedTime
                            aenam        = r-ChangedBy
-                           del_ind      = space ) ).
+                           del_ind      = r-DeletionIndicator ) ).   " [수정 #3] 기존: space
 
       INSERT ztmrmd00420 FROM TABLE @lt_hist.
     ENDIF.
 
-    " D: 삭제지시자 'X'
-    " [수정 #1] 삭제는 키만 넘어오므로 삭제 시각·사용자를 여기서 구해서 변경 일시에 기록
-    DATA(lv_del_date) = cl_abap_context_info=>get_system_date( ).
-    DATA(lv_del_time) = cl_abap_context_info=>get_system_time( ).
-    DATA(lv_del_user) = cl_abap_context_info=>get_user_technical_name( ).
-
-    LOOP AT delete-matsup INTO DATA(ls_d).
-      UPDATE ztmrmd00420
-        SET del_ind = 'X',
-            aedat   = @lv_del_date,      " [수정 #1]
-            aezet   = @lv_del_time,      " [수정 #1]
-            aenam   = @lv_del_user       " [수정 #1]
-        WHERE bukrs       = @ls_d-CompanyCode
-          AND matnr       = @ls_d-Material
-          AND lifnr       = @ls_d-Supplier
-          AND goods_lifnr = @ls_d-GoodsSupplier
-          AND del_ind     = @space.
-    ENDLOOP.
+    " [수정 #3] 물리 삭제가 없어져서 delete-matsup 처리 제거
+    "  (D는 SaveAll/PATCH에서 삭제지시자 update로 들어와 위 update-matsup에서 처리됨)
   ENDMETHOD.
 
 ENDCLASS.

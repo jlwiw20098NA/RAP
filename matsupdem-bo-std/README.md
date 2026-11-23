@@ -34,7 +34,7 @@ Status(C/U/D)를 필드로 받지 않고 **HTTP 메서드로 구분**하고, 여
 |---|---|
 | C | `POST MatSupSave` + JSON 본문 |
 | U | `PATCH MatSupSave(CompanyCode='..',Material='..',Supplier='..',GoodsSupplier='..')` + 바꿀 필드만 |
-| D | `DELETE MatSupSave(CompanyCode='..',Material='..',Supplier='..',GoodsSupplier='..')` |
+| D | `PATCH MatSupSave(...)` + `{"DeletionIndicator": true}` (물리 삭제 없음, `delete` 비활성화) |
 
 ## `$batch` 호출 예시 (multipart)
 
@@ -72,9 +72,11 @@ Content-Type: application/http
 Content-Transfer-Encoding: binary
 Content-ID: 3
 
-DELETE MatSupSave(CompanyCode='1000',Material='MAT003',Supplier='V004',GoodsSupplier='V004') HTTP/1.1
+PATCH MatSupSave(CompanyCode='1000',Material='MAT003',Supplier='V004',GoodsSupplier='V004') HTTP/1.1
+Content-Type: application/json
 If-Match: *
 
+{"DeletionIndicator":true}
 --changeset_1--
 --batch_1--
 ```
@@ -83,6 +85,13 @@ If-Match: *
 - 줄바꿈은 **CRLF**여야 하고, 헤더와 본문 사이에 **빈 줄**이 필요합니다. 형식이 조금만 틀려도 400 오류가 납니다.
 - ETag를 쓰지 않아 `If-Match: *`로 보냅니다.
 - 시스템에 따라 JSON 형식 `$batch`(`Content-Type: application/json`, `"requests": [...]`)도 지원합니다. 지원 여부는 직접 확인하세요.
+
+## 소프트 삭제
+
+- `delete`를 BDEF와 projection에서 뺐습니다. 삭제는 `PATCH`로 `DeletionIndicator`를 `true`로 바꿉니다. 데이터는 그대로 남습니다.
+- `validateOnUpdate`: DB에서 이미 삭제 상태인 데이터는 수정·재삭제를 막습니다.
+- `validateOnCreate`: 삭제 상태로 생성할 수 없고, 삭제된 데이터와 같은 키로 재등록할 수 없습니다.
+- 조회 화면에서 삭제된 데이터를 빼려면 `$filter=DeletionIndicator eq false`를 쓰세요.
 
 ## 유효성 체크 (validateOnCreate)
 

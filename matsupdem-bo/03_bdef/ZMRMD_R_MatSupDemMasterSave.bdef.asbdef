@@ -11,7 +11,7 @@ authorization master ( global )
   // CRUD는 internal: API로는 SaveAll(Status C/U/D)로만 저장 가능
   internal create;
   internal update;
-  internal delete;
+  // [수정 #3] internal delete 제거: D는 물리 삭제 대신 삭제지시자를 'X'로 update
 
   field ( readonly : update ) CompanyCode, Material, Supplier, GoodsSupplier;
 
@@ -20,11 +20,12 @@ authorization master ( global )
   // [수정 #1] 생성/변경 일시·사용자: 읽기 전용, determination이 채움
   field ( readonly ) CreatedDate, CreatedTime, CreatedBy,
                      ChangedDate, ChangedTime, ChangedBy,
-                     CreatedTimeStamp, ChangedTimeStamp;
+                     CreatedTimeStamp, ChangedTimeStamp,
+                     DeletionIndicator;                  // [수정 #3] SaveAll(Status D)로만 변경
 
   // [수정 #1] 변경 트리거는 업무 필드만 ('update' 전체로 걸면 자기 변경으로 재실행될 수 있음)
   determination setCreateStamp on save { create; }
-  determination setChangeStamp on save { field SupplyRatio, Remark; }
+  determination setChangeStamp on save { field SupplyRatio, Remark, DeletionIndicator; }   // [수정 #3] 삭제지시자 추가
 
   mapping for ztmrmd00410              // TODO: 오른쪽 컬럼명을 실제 컬럼명으로
   {
@@ -40,6 +41,7 @@ authorization master ( global )
     ChangedDate   = aedat;         // [수정 #1]
     ChangedTime   = aezet;         // [수정 #1]
     ChangedBy     = aenam;         // [수정 #1]
+    DeletionIndicator = del_ind;   // [수정 #3] TODO: 실제 컬럼명
     // CreatedTimeStamp, ChangedTimeStamp: 계산 필드라 매핑하지 않음
   }
 }

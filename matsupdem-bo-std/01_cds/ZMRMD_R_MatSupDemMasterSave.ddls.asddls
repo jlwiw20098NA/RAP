@@ -13,6 +13,9 @@ define root view entity ZMRMD_R_MatSupDemMasterSave
   key GoodsSupplier,
       SupplyRatio,     // 예시 필드 1 (U 대상)
       Remark,          // 예시 필드 2 (U 대상)
+      // [수정 #3] 삭제지시자: D는 물리 삭제 대신 이 값을 'X'(true)로 바꿈
+      // TODO: ZMRMD_I_ZTMRMD00410의 실제 필드명으로 맞추세요
+      DeletionIndicator,
 
       // [수정 #1] 생성/변경 일시·사용자 추가 (매핑 대상, determination이 채움)
       // TODO: ZMRMD_I_ZTMRMD00410의 실제 필드명으로 맞추세요

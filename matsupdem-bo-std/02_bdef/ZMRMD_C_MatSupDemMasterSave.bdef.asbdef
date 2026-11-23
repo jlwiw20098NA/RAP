@@ -5,5 +5,5 @@ define behavior for ZMRMD_C_MatSupDemMasterSave alias MatSup
 {
   use create;
   use update;
-  use delete;
+  // [수정 #3] use delete 제거 (소프트 삭제는 PATCH)
 }

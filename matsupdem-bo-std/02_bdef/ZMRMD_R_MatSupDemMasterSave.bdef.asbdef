@@ -1,5 +1,5 @@
 // [표준 CRUD 버전]
-// - Status 대신 HTTP 메서드로 구분: C=POST, U=PATCH, D=DELETE
+// - Status 대신 HTTP 메서드로 구분: C=POST, U=PATCH, D=PATCH { "DeletionIndicator": true }   [수정 #3]
 // - 여러 행은 화면에서 $batch의 changeset 하나로 묶어 보냄 → 한 LUW (하나라도 실패하면 전체 롤백)
 // - with additional save: 00410은 managed가 저장, 같은 트랜잭션에서 save_modified가 00420 저장
 managed with additional save implementation in class zbp_mrmd_r_matsupdemmastersave unique;
@@ -12,13 +12,15 @@ authorization master ( global )
 {
   create;
   update;
-  delete;
+  // [수정 #3] delete 제거: 물리 삭제 대신 PATCH로 삭제지시자를 true로 바꿈 (데이터는 남김)
 
   // 키: 생성 때만 입력, 수정 불가 → U는 SupplyRatio, Remark만 바뀜
   field ( mandatory : create, readonly : update ) CompanyCode, Material, Supplier, GoodsSupplier;
 
   // 생성 시 필수 입력 + 중복 + 유효성(회사코드/자재/공급업체/물품공급업체) 체크
   validation validateOnCreate on save { create; }
+  // [수정 #3] 이미 삭제된(삭제지시자 X) 데이터는 수정·재삭제 불가
+  validation validateOnUpdate on save { update; }
 
   // [수정 #1] 생성/변경 일시·사용자: 읽기 전용, determination이 채움
   field ( readonly ) CreatedDate, CreatedTime, CreatedBy,
@@ -27,7 +29,7 @@ authorization master ( global )
 
   // [수정 #1] 변경 트리거는 업무 필드만 ('update' 전체로 걸면 자기 변경으로 재실행될 수 있음)
   determination setCreateStamp on save { create; }
-  determination setChangeStamp on save { field SupplyRatio, Remark; }
+  determination setChangeStamp on save { field SupplyRatio, Remark, DeletionIndicator; }   // [수정 #3] 삭제지시자 추가
 
   mapping for ztmrmd00410              // TODO: 오른쪽 컬럼명을 실제 컬럼명으로
   {
@@ -43,6 +45,7 @@ authorization master ( global )
     ChangedDate   = aedat;         // [수정 #1]
     ChangedTime   = aezet;         // [수정 #1]
     ChangedBy     = aenam;         // [수정 #1]
+    DeletionIndicator = del_ind;   // [수정 #3] TODO: 실제 컬럼명
     // CreatedTimeStamp, ChangedTimeStamp: 계산 필드라 매핑하지 않음
   }
 }
