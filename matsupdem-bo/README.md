@@ -7,6 +7,8 @@
 > `SupplyRatio`, `Remark`는 예시 필드입니다. 테이블/컬럼명, 타입은 코드의 `TODO` 위치를 실제 값으로 바꾸세요.
 > 키는 실제와 같은 `CompanyCode, Material, Supplier, GoodsSupplier`입니다.
 
+> 같은 기능을 abstract entity 없이 표준 CRUD + `$batch`로 만든 버전은 `../matsupdem-bo-std/`에 있습니다. 오브젝트 이름이 같으니 시스템에는 둘 중 하나만 올리세요.
+
 ## 폴더 구조
 
 | 폴더 | 내용 |

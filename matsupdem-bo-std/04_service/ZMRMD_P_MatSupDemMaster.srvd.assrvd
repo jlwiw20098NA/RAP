@@ -1,0 +1,8 @@
+@EndUserText.label: 'Material Supplier Demand Master API'
+// Service Binding: OData V4 - Web API (새 이름, 올바른 CTS 요청으로 생성)
+// - MatSupSave : 저장 (POST / PATCH / DELETE, $batch로 묶어서 호출)
+// - 조회 뷰(ZMRMD_R_MatSupDemMaster)를 같은 API로 노출하려면 아래 주석을 해제
+define service ZMRMD_P_MatSupDemMaster {
+  expose ZMRMD_C_MatSupDemMasterSave as MatSupSave;
+//  expose ZMRMD_R_MatSupDemMaster     as MatSup;
+}
