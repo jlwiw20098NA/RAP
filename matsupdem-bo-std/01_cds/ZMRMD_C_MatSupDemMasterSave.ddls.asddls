@@ -9,5 +9,10 @@ define root view entity ZMRMD_C_MatSupDemMasterSave
   key Supplier,
   key GoodsSupplier,
       SupplyRatio,
-      Remark
+      Remark,
+      // [수정 #1] 화면 표시용 생성/변경 정보
+      CreatedTimeStamp,
+      CreatedBy,
+      ChangedTimeStamp,
+      ChangedBy
 }

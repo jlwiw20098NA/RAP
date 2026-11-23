@@ -14,6 +14,12 @@ CLASS lhc_matsup DEFINITION INHERITING FROM cl_abap_behavior_handler.
     METHODS get_global_authorizations FOR GLOBAL AUTHORIZATION
       IMPORTING REQUEST requested_authorizations FOR MatSup RESULT result.
 
+    " [수정 #1] 생성/변경 일시·사용자
+    METHODS setCreateStamp FOR DETERMINE ON SAVE
+      IMPORTING keys FOR MatSup~setCreateStamp.
+    METHODS setChangeStamp FOR DETERMINE ON SAVE
+      IMPORTING keys FOR MatSup~setChangeStamp.
+
     METHODS SaveAll FOR MODIFY
       IMPORTING keys FOR ACTION MatSup~SaveAll.
 ENDCLASS.
@@ -259,6 +265,38 @@ CLASS lhc_matsup IMPLEMENTATION.
     ENDLOOP.
   ENDMETHOD.
 
+
+  " [수정 #1] 생성 일시·사용자 (서버 시스템 시간)
+  METHOD setCreateStamp.
+    DATA(lv_date) = cl_abap_context_info=>get_system_date( ).
+    DATA(lv_time) = cl_abap_context_info=>get_system_time( ).
+    DATA(lv_user) = cl_abap_context_info=>get_user_technical_name( ).
+
+    MODIFY ENTITIES OF zmrmd_r_matsupdemmastersave IN LOCAL MODE
+      ENTITY MatSup
+      UPDATE FIELDS ( CreatedDate CreatedTime CreatedBy )
+      WITH VALUE #( FOR k IN keys ( %tky        = k-%tky
+                                    CreatedDate = lv_date
+                                    CreatedTime = lv_time
+                                    CreatedBy   = lv_user ) ).
+  ENDMETHOD.
+
+
+  " [수정 #1] 변경 일시·사용자 (SupplyRatio, Remark가 바뀔 때)
+  METHOD setChangeStamp.
+    DATA(lv_date) = cl_abap_context_info=>get_system_date( ).
+    DATA(lv_time) = cl_abap_context_info=>get_system_time( ).
+    DATA(lv_user) = cl_abap_context_info=>get_user_technical_name( ).
+
+    MODIFY ENTITIES OF zmrmd_r_matsupdemmastersave IN LOCAL MODE
+      ENTITY MatSup
+      UPDATE FIELDS ( ChangedDate ChangedTime ChangedBy )
+      WITH VALUE #( FOR k IN keys ( %tky        = k-%tky
+                                    ChangedDate = lv_date
+                                    ChangedTime = lv_time
+                                    ChangedBy   = lv_user ) ).
+  ENDMETHOD.
+
 ENDCLASS.
 
 
@@ -277,6 +315,7 @@ CLASS lsc_matsup IMPLEMENTATION.
     "  U: 유효한 행(삭제지시자 공백)의 SupplyRatio / Remark 수정 (바뀐 필드만)
     "  D: 유효한 행에 삭제지시자 'X'
     "  ※ 이 단계는 실패시킬 수 없으므로 검증은 모두 SaveAll에서 끝냄
+    "  생성/변경 일시·사용자(ERDAT/ERZET/ERNAM, AEDAT/AEZET/AENAM)도 함께 기록   [수정 #1]
     "  TODO: 테이블명(ztmrmd00420)과 컬럼명을 실제 값으로 맞추세요
     "================================================================
     DATA lt_hist TYPE STANDARD TABLE OF ztmrmd00420 WITH EMPTY KEY.
@@ -294,6 +333,12 @@ CLASS lsc_matsup IMPLEMENTATION.
                            time_stamp   = lv_ts
                            supply_ratio = c-SupplyRatio
                            remark       = c-Remark
+                           erdat        = c-CreatedDate     " [수정 #1] determination이 채운 값
+                           erzet        = c-CreatedTime
+                           ernam        = c-CreatedBy
+                           aedat        = c-ChangedDate
+                           aezet        = c-ChangedTime
+                           aenam        = c-ChangedBy
                            del_ind      = space ) ).
       INSERT ztmrmd00420 FROM TABLE @lt_hist.
     ENDIF.
@@ -318,12 +363,32 @@ CLASS lsc_matsup IMPLEMENTATION.
             AND goods_lifnr = @ls_u-GoodsSupplier
             AND del_ind     = @space.
       ENDIF.
+      " [수정 #1] 변경 일시·사용자 (setChangeStamp가 채운 값)
+      IF ls_u-%control-ChangedDate = if_abap_behv=>mk-on.
+        UPDATE ztmrmd00420
+          SET aedat = @ls_u-ChangedDate,
+              aezet = @ls_u-ChangedTime,
+              aenam = @ls_u-ChangedBy
+          WHERE bukrs       = @ls_u-CompanyCode
+            AND matnr       = @ls_u-Material
+            AND lifnr       = @ls_u-Supplier
+            AND goods_lifnr = @ls_u-GoodsSupplier
+            AND del_ind     = @space.
+      ENDIF.
     ENDLOOP.
 
     " D: 삭제지시자 'X'
+    " [수정 #1] 삭제는 키만 넘어오므로 삭제 시각·사용자를 여기서 구해서 변경 일시에 기록
+    DATA(lv_del_date) = cl_abap_context_info=>get_system_date( ).
+    DATA(lv_del_time) = cl_abap_context_info=>get_system_time( ).
+    DATA(lv_del_user) = cl_abap_context_info=>get_user_technical_name( ).
+
     LOOP AT delete-matsup INTO DATA(ls_d).
       UPDATE ztmrmd00420
-        SET del_ind = 'X'
+        SET del_ind = 'X',
+            aedat   = @lv_del_date,      " [수정 #1]
+            aezet   = @lv_del_time,      " [수정 #1]
+            aenam   = @lv_del_user       " [수정 #1]
         WHERE bukrs       = @ls_d-CompanyCode
           AND matnr       = @ls_d-Material
           AND lifnr       = @ls_d-Supplier
