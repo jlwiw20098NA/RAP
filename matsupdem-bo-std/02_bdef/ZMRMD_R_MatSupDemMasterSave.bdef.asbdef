@@ -20,7 +20,12 @@ authorization master ( global )
   // 생성 시 필수 입력 + 중복 + 유효성(회사코드/자재/공급업체/물품공급업체) 체크
   validation validateOnCreate on save { create; }
   // [수정 #3] 이미 삭제된(삭제지시자 X) 데이터는 수정·재삭제 불가
-  validation validateOnUpdate on save { update; }
+  // [수정 #4] 이 릴리스는 validation 트리거에 update를 쓸 수 없어서 필드 트리거로 변경
+  //  기존: on save { update; }
+  //  변경: 수정 가능한 필드(SupplyRatio, Remark)나 삭제지시자가 바뀌면 실행
+  //  - 생성 때도 이 필드에 값이 있으면 실행되지만, DB에 행이 없어서 그냥 통과함
+  //  - 수정 가능한 필드가 늘어나면 여기에도 추가하세요
+  validation validateOnUpdate on save { field SupplyRatio, Remark, DeletionIndicator; }
 
   // [수정 #1] 생성/변경 일시·사용자: 읽기 전용, determination이 채움
   field ( readonly ) CreatedDate, CreatedTime, CreatedBy,

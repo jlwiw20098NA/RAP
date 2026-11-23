@@ -89,7 +89,7 @@ If-Match: *
 ## 소프트 삭제
 
 - `delete`를 BDEF와 projection에서 뺐습니다. 삭제는 `PATCH`로 `DeletionIndicator`를 `true`로 바꿉니다. 데이터는 그대로 남습니다.
-- `validateOnUpdate`: DB에서 이미 삭제 상태인 데이터는 수정·재삭제를 막습니다.
+- `validateOnUpdate`: DB에서 이미 삭제 상태인 데이터는 수정·재삭제를 막습니다. 트리거는 `update` 대신 필드 트리거(`SupplyRatio, Remark, DeletionIndicator`)입니다.
 - `validateOnCreate`: 삭제 상태로 생성할 수 없고, 삭제된 데이터와 같은 키로 재등록할 수 없습니다.
 - 조회 화면에서 삭제된 데이터를 빼려면 `$filter=DeletionIndicator eq false`를 쓰세요.
 
