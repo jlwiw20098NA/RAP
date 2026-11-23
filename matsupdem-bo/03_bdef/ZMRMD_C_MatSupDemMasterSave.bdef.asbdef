@@ -1,0 +1,8 @@
+projection;
+strict ( 2 );
+
+// internal CRUD는 projection에서 노출할 수 없음 -> SaveAll만 노출
+define behavior for ZMRMD_C_MatSupDemMasterSave alias MatSup
+{
+  use action SaveAll;
+}
