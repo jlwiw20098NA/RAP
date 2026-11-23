@@ -100,7 +100,7 @@ If-Match: *
 
 - 00410: 루트 뷰에 `CreatedDate/CreatedTime/CreatedBy`, `ChangedDate/ChangedTime/ChangedBy`를 추가해 ERDAT/ERZET/ERNAM, AEDAT/AEZET/AENAM에 매핑했습니다.
   값은 determination `setCreateStamp`(생성), `setChangeStamp`(SupplyRatio·Remark 변경 시)가 서버 시스템 시간과 로그인 사용자로 채웁니다.
-- 00420: `save_modified`에서 같은 값을 기록합니다. C는 생성·변경 정보 그대로, U는 변경 정보를 갱신, D는 삭제 시각·사용자를 변경 정보에 기록하고 삭제지시자 'X'를 찍습니다.
+- 00420: `save_modified`에서 C/U 모두 최종 상태를 `READ ENTITIES`로 읽어 **로그 행으로 INSERT**합니다(한 번의 FOR로 처리). D는 삭제지시자 공백인 로그 행에 삭제 시각·사용자와 'X'를 기록합니다.
 - 화면 표시용 `CreatedTimeStamp`, `ChangedTimeStamp`는 계산 필드(UTC)입니다.
 
 ## 활성화 순서

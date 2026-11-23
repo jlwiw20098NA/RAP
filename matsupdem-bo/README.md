@@ -45,8 +45,8 @@ POST SaveAll (행 목록, 행마다 Status)
 
 | Status | 00410 | 00420 | 막는 경우 |
 |---|---|---|---|
-| C | 생성 | **행 생성** (키 4개 + TimeStamp + 데이터, 삭제지시자 공백) | 키 중복 / 유효성 오류 |
-| U | SupplyRatio, Remark 수정 | 유효한 행(삭제지시자 공백)의 **같은 필드 수정** | 데이터 없음 |
+| C | 생성 | **새 로그 행 생성** (키 4개 + TimeStamp + 데이터, 삭제지시자 공백) | 키 중복 / 유효성 오류 |
+| U | SupplyRatio, Remark 수정 | **최종 상태를 새 로그 행으로 생성** (TimeStamp = 저장 시각) | 데이터 없음 |
 | D | 삭제 | 유효한 행에 **삭제지시자 'X'** | 데이터 없음 |
 
 - 00420에는 Status 필드를 두지 않습니다.
@@ -94,7 +94,7 @@ X-CSRF-Token: <토큰>
 
 - 00410: 루트 뷰에 `CreatedDate/CreatedTime/CreatedBy`, `ChangedDate/ChangedTime/ChangedBy`를 추가해 ERDAT/ERZET/ERNAM, AEDAT/AEZET/AENAM에 매핑했습니다.
   값은 determination `setCreateStamp`(생성), `setChangeStamp`(SupplyRatio·Remark 변경 시)가 서버 시스템 시간과 로그인 사용자로 채웁니다.
-- 00420: `save_modified`에서 같은 값을 기록합니다. C는 생성·변경 정보 그대로, U는 변경 정보를 갱신, D는 삭제 시각·사용자를 변경 정보에 기록하고 삭제지시자 'X'를 찍습니다.
+- 00420: `save_modified`에서 C/U 모두 최종 상태를 `READ ENTITIES`로 읽어 **로그 행으로 INSERT**합니다(한 번의 FOR로 처리). D는 삭제지시자 공백인 로그 행에 삭제 시각·사용자와 'X'를 기록합니다.
 - 화면 표시용 `CreatedTimeStamp`, `ChangedTimeStamp`는 계산 필드(UTC)입니다.
 
 ## 활성화 순서

@@ -311,9 +311,8 @@ CLASS lsc_matsup IMPLEMENTATION.
   METHOD save_modified.
     "================================================================
     " 00420 저장 (00410 저장과 같은 트랜잭션 → COMMIT은 프레임워크가 함)
-    "  C: 행 생성 (TimeStamp = 저장 시각, UTC)
-    "  U: 유효한 행(삭제지시자 공백)의 SupplyRatio / Remark 수정 (바뀐 필드만)
-    "  D: 유효한 행에 삭제지시자 'X'
+    "  C/U: 최종 상태를 로그 행으로 INSERT (TimeStamp = 저장 시각, UTC)   [수정 #2]
+    "  D: 삭제지시자 공백인 로그 행에 'X' (변경 없음)
     "  ※ 이 단계는 실패시킬 수 없으므로 검증은 모두 SaveAll에서 끝냄
     "  생성/변경 일시·사용자(ERDAT/ERZET/ERNAM, AEDAT/AEZET/AENAM)도 함께 기록   [수정 #1]
     "  TODO: 테이블명(ztmrmd00420)과 컬럼명을 실제 값으로 맞추세요
@@ -323,59 +322,47 @@ CLASS lsc_matsup IMPLEMENTATION.
 
     GET TIME STAMP FIELD lv_ts.
 
-    " C: 생성
-    IF create-matsup IS NOT INITIAL.
-      lt_hist = VALUE #( FOR c IN create-matsup
-                         ( bukrs        = c-CompanyCode
-                           matnr        = c-Material
-                           lifnr        = c-Supplier
-                           goods_lifnr  = c-GoodsSupplier
+    " [수정 #2] C/U 공통: 생성·수정된 행을 하나로 모아 00420에 로그 행을 쌓음
+    "  - update-matsup에는 바뀐 필드만 값이 있어서, 최종 상태 전체를 READ ENTITIES로 다시 읽음
+    "  - FOR 두 개를 연달아 쓰면 중첩 반복(곱집합)이 되므로 BASE로 이어 붙임
+    DATA lt_keys TYPE TABLE FOR READ IMPORT zmrmd_r_matsupdemmastersave\\matsup.
+
+    lt_keys = VALUE #( FOR c IN create-matsup
+                       ( CompanyCode   = c-CompanyCode
+                         Material      = c-Material
+                         Supplier      = c-Supplier
+                         GoodsSupplier = c-GoodsSupplier ) ).
+    lt_keys = VALUE #( BASE lt_keys
+                       FOR u IN update-matsup
+                       ( CompanyCode   = u-CompanyCode
+                         Material      = u-Material
+                         Supplier      = u-Supplier
+                         GoodsSupplier = u-GoodsSupplier ) ).
+
+    IF lt_keys IS NOT INITIAL.
+      READ ENTITIES OF zmrmd_r_matsupdemmastersave IN LOCAL MODE
+        ENTITY MatSup
+        ALL FIELDS WITH lt_keys
+        RESULT DATA(lt_rows).
+
+      lt_hist = VALUE #( FOR r IN lt_rows
+                         ( bukrs        = r-CompanyCode
+                           matnr        = r-Material
+                           lifnr        = r-Supplier
+                           goods_lifnr  = r-GoodsSupplier
                            time_stamp   = lv_ts
-                           supply_ratio = c-SupplyRatio
-                           remark       = c-Remark
-                           erdat        = c-CreatedDate     " [수정 #1] determination이 채운 값
-                           erzet        = c-CreatedTime
-                           ernam        = c-CreatedBy
-                           aedat        = c-ChangedDate
-                           aezet        = c-ChangedTime
-                           aenam        = c-ChangedBy
+                           supply_ratio = r-SupplyRatio
+                           remark       = r-Remark
+                           erdat        = r-CreatedDate
+                           erzet        = r-CreatedTime
+                           ernam        = r-CreatedBy
+                           aedat        = r-ChangedDate
+                           aezet        = r-ChangedTime
+                           aenam        = r-ChangedBy
                            del_ind      = space ) ).
+
       INSERT ztmrmd00420 FROM TABLE @lt_hist.
     ENDIF.
-
-    " U: 수정 (%control로 실제로 넘어온 필드만 반영)
-    LOOP AT update-matsup INTO DATA(ls_u).
-      IF ls_u-%control-SupplyRatio = if_abap_behv=>mk-on.
-        UPDATE ztmrmd00420
-          SET supply_ratio = @ls_u-SupplyRatio
-          WHERE bukrs       = @ls_u-CompanyCode
-            AND matnr       = @ls_u-Material
-            AND lifnr       = @ls_u-Supplier
-            AND goods_lifnr = @ls_u-GoodsSupplier
-            AND del_ind     = @space.
-      ENDIF.
-      IF ls_u-%control-Remark = if_abap_behv=>mk-on.
-        UPDATE ztmrmd00420
-          SET remark = @ls_u-Remark
-          WHERE bukrs       = @ls_u-CompanyCode
-            AND matnr       = @ls_u-Material
-            AND lifnr       = @ls_u-Supplier
-            AND goods_lifnr = @ls_u-GoodsSupplier
-            AND del_ind     = @space.
-      ENDIF.
-      " [수정 #1] 변경 일시·사용자 (setChangeStamp가 채운 값)
-      IF ls_u-%control-ChangedDate = if_abap_behv=>mk-on.
-        UPDATE ztmrmd00420
-          SET aedat = @ls_u-ChangedDate,
-              aezet = @ls_u-ChangedTime,
-              aenam = @ls_u-ChangedBy
-          WHERE bukrs       = @ls_u-CompanyCode
-            AND matnr       = @ls_u-Material
-            AND lifnr       = @ls_u-Supplier
-            AND goods_lifnr = @ls_u-GoodsSupplier
-            AND del_ind     = @space.
-      ENDIF.
-    ENDLOOP.
 
     " D: 삭제지시자 'X'
     " [수정 #1] 삭제는 키만 넘어오므로 삭제 시각·사용자를 여기서 구해서 변경 일시에 기록
