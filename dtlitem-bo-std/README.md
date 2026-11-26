@@ -26,6 +26,10 @@ SaveAll action과 abstract entity(`ZMRMD_A_DtlSaveReq/Mng/User`)가 없습니다
 | #4 | `validateOnCreate` (Mng, User) | ItemGroupCode 공통코드 체크(구현됨), 유효성 체크 위치 #2·#3(주석) |
 | #5 | BDEF | 담당자 생성은 Mng를 통해서만 (`POST Mng(...)/_User` 또는 deep insert) |
 | #6 | BDEF, `validateOnCreate` 주석 | `DetailedItemGroupCode`를 `mandatory`에서 제외 → 빈 값(`''`)으로 저장 가능 |
+| #7 | User BDEF `delete ( precheck )`, User `validateOnCreate`, `precheck_delete` | 담당자 생성·삭제 시 키 4개(CompanyCode, ItemGroupCode, DetailedItemGroupCode, UserID) 빈 값이면 오류. 수정은 internal이라 대상 없음 |
+
+> [표준 #6]과 [표준 #7]을 함께 쓰면 **DetailedItemGroupCode가 빈 값인 Mng 아래에는 담당자를 둘 수 없습니다.**
+> 빈 값 Mng에도 담당자가 필요하면 #7의 `DetailedItemGroupCode IS INITIAL` 조건을 지우세요.
 
 ### DetailedItemGroupCode 빈 값 [표준 #6]
 

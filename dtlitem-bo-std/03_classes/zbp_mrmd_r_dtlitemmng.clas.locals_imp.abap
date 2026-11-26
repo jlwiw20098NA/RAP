@@ -161,6 +161,10 @@ CLASS lhc_user DEFINITION INHERITING FROM cl_abap_behavior_handler.
     METHODS validateOnCreate FOR VALIDATE ON SAVE
       IMPORTING keys FOR User~validateOnCreate.
 
+    " [표준 #7] 담당자 삭제 전 키 4개 빈 값 체크
+    METHODS precheck_delete FOR PRECHECK
+      IMPORTING keys FOR DELETE User.
+
     METHODS setCreateStamp FOR DETERMINE ON SAVE
       IMPORTING keys FOR User~setCreateStamp.
 ENDCLASS.
@@ -176,6 +180,20 @@ CLASS lhc_user IMPLEMENTATION.
       RESULT DATA(lt_user).
 
     LOOP AT lt_user INTO DATA(ls_u).
+      " [표준 #7] 키 4개 필수 체크 (빈 값이면 오류)
+      IF ls_u-CompanyCode           IS INITIAL
+      OR ls_u-ItemGroupCode         IS INITIAL
+      OR ls_u-DetailedItemGroupCode IS INITIAL
+      OR ls_u-UserID                IS INITIAL.
+        APPEND VALUE #( %tky = ls_u-%tky ) TO failed-user.
+        APPEND VALUE #( %tky = ls_u-%tky
+                        %msg = new_message_with_text(
+                                 severity = if_abap_behv_message=>severity-error
+                                 text     = |담당자: 회사코드, 품목그룹코드, 세부품목그룹코드, 사번은 필수입니다| ) )
+               TO reported-user.
+        CONTINUE.
+      ENDIF.
+
       "▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
       " [유효성 체크 위치 #3] UserID (담당자 사번)
       "  - ls_u-UserID 가 유효한 사번/사용자인지 확인 (예: 사용자 마스터, 인사 데이터)
@@ -187,6 +205,25 @@ CLASS lhc_user IMPLEMENTATION.
       "                               text     = |사번 { ls_u-UserID }가 유효하지 않습니다| )
       "                      %element-UserID = if_abap_behv=>mk-on ) TO reported-user.
       "▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD precheck_delete.
+    " [표준 #7] DELETE User(CompanyCode='..',ItemGroupCode='..',DetailedItemGroupCode='..',UserID='..')
+    "  키 중 하나라도 빈 값('')이면 삭제하지 않음
+    LOOP AT keys INTO DATA(ls_key).
+      IF ls_key-CompanyCode           IS INITIAL
+      OR ls_key-ItemGroupCode         IS INITIAL
+      OR ls_key-DetailedItemGroupCode IS INITIAL
+      OR ls_key-UserID                IS INITIAL.
+        APPEND VALUE #( %tky = ls_key-%tky ) TO failed-user.
+        APPEND VALUE #( %tky = ls_key-%tky
+                        %msg = new_message_with_text(
+                                 severity = if_abap_behv_message=>severity-error
+                                 text     = |담당자 삭제: 회사코드, 품목그룹코드, 세부품목그룹코드, 사번은 필수입니다| ) )
+               TO reported-user.
+      ENDIF.
     ENDLOOP.
   ENDMETHOD.
 

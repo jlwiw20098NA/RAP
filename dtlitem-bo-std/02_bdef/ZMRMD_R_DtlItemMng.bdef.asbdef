@@ -60,7 +60,9 @@ authorization dependent by _Mng
   // internal update: determination(setCreateStamp)이 일시를 채우려면 필요. API로는 수정 불가
   //   (사번은 키라 수정 없음. 바꾸려면 DELETE 후 POST)
   internal update;
-  delete;                             // [표준 #2] internal 제거
+  // [표준 #7] 삭제 시 키 4개가 빈 값이 아닌지 확인 (precheck_delete)
+  //   OData DELETE는 URL에 키 4개가 모두 있어야 하지만 '' 같은 빈 값은 통과하므로 여기서 막음
+  delete ( precheck );                // [표준 #2] internal 제거
   association _Mng;
 
   field ( readonly ) CompanyCode, ItemGroupCode, DetailedItemGroupCode;   // 부모 키에서 자동으로 채워짐
@@ -69,6 +71,10 @@ authorization dependent by _Mng
                      CreatedTimeStamp, ChangedTimeStamp, CreatedBy, ChangedBy;
 
   // [표준 #4] SaveAll의 [유효성 체크 위치 #3]을 validation으로 이동
+  // [표준 #7] 생성 시 키 4개(CompanyCode, ItemGroupCode, DetailedItemGroupCode, UserID) 빈 값 체크도 여기서
+  //   부모 키 3개는 readonly(부모에서 자동으로 채움)라 mandatory를 걸 수 없고,
+  //   mandatory는 "요청에 넣었는지"만 보고 빈 값('')은 통과시키므로 validation으로 체크
+  //   수정(U)은 internal update라 API로 들어오지 않음 → 체크 대상 없음
   validation validateOnCreate on save { create; }
 
   determination setCreateStamp on save { create; }
