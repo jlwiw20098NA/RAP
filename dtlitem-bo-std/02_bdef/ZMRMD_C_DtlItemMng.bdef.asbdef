@@ -1,0 +1,19 @@
+projection;
+strict ( 2 );
+
+// [표준 #2] SaveAll 대신 표준 동작 노출
+define behavior for ZMRMD_C_DtlItemMng alias Mng
+{
+  use create;
+  use update;
+  use delete;
+
+  use association _User { create; }
+}
+
+define behavior for ZMRMD_C_DtlItemUser alias User
+{
+  use delete;                         // [표준 #2] 담당자 삭제. 수정(update)은 internal이라 노출 안 함
+
+  use association _Mng;
+}

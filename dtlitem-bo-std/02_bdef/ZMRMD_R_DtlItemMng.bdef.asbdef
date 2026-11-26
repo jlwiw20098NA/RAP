@@ -1,0 +1,85 @@
+managed implementation in class zbp_mrmd_r_dtlitemmng unique;
+strict ( 2 );
+
+// [표준] SaveAll(Status C/U/D) 버전을 표준 POST / PATCH / DELETE 버전으로 바꾼 BDEF
+//   [표준 #2] static action SaveAll 제거, create/update/delete를 internal → 공개로
+//   [표준 #3] Mng 삭제 시 "하위 담당자가 남으면 삭제 금지" → delete ( precheck )
+//   [표준 #4] SaveAll 안의 ItemGroupCode 공통코드 체크 → validation (생성 시)
+//   [표준 #5] 담당자 생성은 Mng를 통해서만 (POST Mng(...)/_User 또는 deep insert)
+
+define behavior for ZMRMD_R_DtlItemMng alias Mng
+persistent table ztmrmd00440          // TODO: 실제 테이블명
+lock master
+authorization master ( global )
+{
+  // [표준 #2] internal 제거 → API로 직접 호출
+  create;
+  update;
+  delete ( precheck );                // [표준 #3] 하위 담당자 남아 있으면 삭제 금지
+  association _User { create; }       // [표준 #5] internal 제거
+
+  // [표준 #2] 키는 생성 때 필수, 수정 불가
+  field ( mandatory : create, readonly : update ) CompanyCode, ItemGroupCode, DetailedItemGroupCode;
+  field ( readonly ) CreatedDate, CreatedTime, ChangedDate, ChangedTime,
+                     CreatedTimeStamp, ChangedTimeStamp, CreatedBy, ChangedBy;
+  // 수정 가능한 필드는 DetailedItemGroupName, Remark 뿐 (SaveAll의 Status U와 같음)
+
+  // [표준 #4] SaveAll의 [유효성 체크 #1], [유효성 체크 위치 #2]를 validation으로 이동
+  validation validateOnCreate on save { create; }
+
+  // 생성/변경 일시·사용자 (변경 없음)
+  determination setCreateStamp on save { create; }
+  determination setChangeStamp on save { field DetailedItemGroupName, Remark; }
+
+  mapping for ztmrmd00440              // TODO: 오른쪽 컬럼명을 실제 컬럼명으로
+  {
+    CompanyCode           = bukrs;
+    ItemGroupCode         = item_group_code;
+    DetailedItemGroupCode = dtl_item_group_code;
+    DetailedItemGroupName = dtl_item_group_name;
+    Remark                = remark;
+    CreatedDate           = erdat;
+    CreatedTime           = erzet;
+    CreatedBy             = ernam;
+    ChangedDate           = aedat;
+    ChangedTime           = aezet;
+    ChangedBy             = aenam;
+    // CreatedTimeStamp, ChangedTimeStamp: 계산 필드라 매핑하지 않음
+  }
+}
+
+define behavior for ZMRMD_R_DtlItemUser alias User
+persistent table ztmrmd00441          // TODO: 실제 테이블명
+lock dependent by _Mng
+authorization dependent by _Mng
+{
+  // internal update: determination(setCreateStamp)이 일시를 채우려면 필요. API로는 수정 불가
+  //   (사번은 키라 수정 없음. 바꾸려면 DELETE 후 POST)
+  internal update;
+  delete;                             // [표준 #2] internal 제거
+  association _Mng;
+
+  field ( readonly ) CompanyCode, ItemGroupCode, DetailedItemGroupCode;   // 부모 키에서 자동으로 채워짐
+  field ( mandatory : create, readonly : update ) UserID;                 // [표준 #2] mandatory 추가
+  field ( readonly ) CreatedDate, CreatedTime, ChangedDate, ChangedTime,
+                     CreatedTimeStamp, ChangedTimeStamp, CreatedBy, ChangedBy;
+
+  // [표준 #4] SaveAll의 [유효성 체크 위치 #3]을 validation으로 이동
+  validation validateOnCreate on save { create; }
+
+  determination setCreateStamp on save { create; }
+
+  mapping for ztmrmd00441              // TODO: 오른쪽 컬럼명을 실제 컬럼명으로
+  {
+    CompanyCode           = bukrs;
+    ItemGroupCode         = item_group_code;
+    DetailedItemGroupCode = dtl_item_group_code;
+    UserID                = user_id;
+    CreatedDate           = erdat;
+    CreatedTime           = erzet;
+    CreatedBy             = ernam;
+    ChangedDate           = aedat;
+    ChangedTime           = aezet;
+    ChangedBy             = aenam;
+  }
+}

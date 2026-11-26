@@ -1,0 +1,7 @@
+@EndUserText.label: 'Detailed Item Group Mng/User API'
+// Service Binding: OData V4 - Web API
+// ※ 바인딩은 새 이름으로 만들고, 처음부터 올바른 CTS 요청에 넣으세요
+define service ZMRMD_P_DtlItemSave {
+  expose ZMRMD_C_DtlItemMng  as Mng;
+  expose ZMRMD_C_DtlItemUser as User;
+}
