@@ -112,6 +112,8 @@ CLASS lhc_mng IMPLEMENTATION.
 
       "▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
       " [유효성 체크 위치 #2] DetailedItemGroupCode
+      "  [표준 #6] 빈 값은 허용하므로 체크하지 않고 넘어감
+      "    IF ls_m-DetailedItemGroupCode IS INITIAL. CONTINUE. ENDIF.
       "  - ls_m-DetailedItemGroupCode 형식/허용값 확인 (예: 도메인 고정값, 코드 규칙)
       "  - 실패 시: 위와 같은 형태로 failed-mng, reported-mng에 추가
       "      text = |세부품목그룹코드 { ls_m-DetailedItemGroupCode }가 유효하지 않습니다|

@@ -19,7 +19,11 @@ authorization master ( global )
   association _User { create; }       // [표준 #5] internal 제거
 
   // [표준 #2] 키는 생성 때 필수, 수정 불가
-  field ( mandatory : create, readonly : update ) CompanyCode, ItemGroupCode, DetailedItemGroupCode;
+  // [표준 #6] DetailedItemGroupCode는 빈 값('')으로도 저장할 수 있게 mandatory에서 제외
+  //   빈 값도 키 값: 같은 CompanyCode + ItemGroupCode에 빈 값 행은 하나만 가능
+  //   URL에서는 DetailedItemGroupCode='' 로 지정
+  field ( mandatory : create, readonly : update ) CompanyCode, ItemGroupCode;
+  field ( readonly : update ) DetailedItemGroupCode;
   field ( readonly ) CreatedDate, CreatedTime, ChangedDate, ChangedTime,
                      CreatedTimeStamp, ChangedTimeStamp, CreatedBy, ChangedBy;
   // 수정 가능한 필드는 DetailedItemGroupName, Remark 뿐 (SaveAll의 Status U와 같음)

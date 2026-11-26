@@ -25,6 +25,15 @@ SaveAll action과 abstract entity(`ZMRMD_A_DtlSaveReq/Mng/User`)가 없습니다
 | #3 | BDEF `delete ( precheck )`, `precheck_delete` | "하위 담당자가 남으면 Mng 삭제 금지" |
 | #4 | `validateOnCreate` (Mng, User) | ItemGroupCode 공통코드 체크(구현됨), 유효성 체크 위치 #2·#3(주석) |
 | #5 | BDEF | 담당자 생성은 Mng를 통해서만 (`POST Mng(...)/_User` 또는 deep insert) |
+| #6 | BDEF, `validateOnCreate` 주석 | `DetailedItemGroupCode`를 `mandatory`에서 제외 → 빈 값(`''`)으로 저장 가능 |
+
+### DetailedItemGroupCode 빈 값 [표준 #6]
+
+- 생성: 본문에 `"DetailedItemGroupCode": ""`를 넣거나 필드를 빼면 빈 값으로 저장됩니다.
+- 수정·삭제·담당자 추가: URL에 `DetailedItemGroupCode=''`
+  예: `PATCH Mng(CompanyCode='1000',ItemGroupCode='BG003',DetailedItemGroupCode='')`
+- 빈 값도 키 값이라 같은 `CompanyCode + ItemGroupCode`에 **빈 값 행은 하나만** 가능합니다.
+- 나중에 실제 코드로 바꿀 수 없습니다 (키, `readonly : update`). 삭제 후 다시 생성하세요.
 
 ## SaveAll 규칙이 어디로 갔는지
 
