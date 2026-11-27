@@ -1,7 +1,7 @@
 # Class Header / Item RAP BO — 표준 HTTP + ETag 버전
 
 `clshdr-bo-std/`(표준 HTTP 버전)에 **ETag(동시 수정 체크)**를 추가한 버전입니다. 바뀐 곳은 코드에서 `[ETag #번호]`로 검색하세요.
-아래 [ETag](#etag) 절을 먼저 보고, 나머지 내용은 표준 HTTP 버전과 같습니다.
+**ETag 필드는 기존 변경시간 `AEZET`(`ChangeTime`)입니다.** 테이블 컬럼 추가는 없습니다.
 
 > 오브젝트 이름이 `clshdr-bo`, `clshdr-bo-std`와 같습니다. 시스템에는 **셋 중 하나만** 올리세요.
 
@@ -9,29 +9,21 @@
 
 | 번호 | 위치 | 내용 |
 |---|---|---|
-| #1 | 테이블 2개 | `last_changed_at : abp_lastchange_tstmpl` 컬럼 추가 |
-| #2 | Base 뷰 2개 | `last_changed_at as LastChangedAt` |
-| #3 | 루트 뷰 2개 | `LastChangedAt` 노출 (annotation 없음, #5 참고) |
-| #4 | BDEF 2개 | `etag master LastChangedAt`, `LastChangedAt` readonly, mapping 추가 |
-| #5 | BDEF 2개, behavior pool 2개 | `determination setEtag on modify { create; field <수정 가능 필드>; }` → 클래스에서 `GET TIME STAMP`(timestampl)로 채움 |
+| #1 | 루트 뷰 2개 | `ChangeTime`의 `@Consumption.hidden` 제거 (ETag 필드라 API에 노출, 읽기 전용) |
+| #2 | BDEF 2개 | `etag master ChangeTime` |
+| #3 | BDEF 2개, behavior pool 2개 | `setChangeStamp`를 `on save` → **`on modify`** 로 변경 (구현 코드는 그대로) |
 
-**ETag 값은 annotation이 아니라 클래스(`setEtag`)가 채웁니다.**
-- 트리거: 헤더 `create; field ItemGroupCode, KiloUnit;` / 아이템 `create; field ItemGroupCode, DetailedItemGroupCode;`
-- **수정 가능한 필드를 추가하면 `setEtag` 트리거에도 꼭 추가하세요.** 빠지면 그 필드만 바꾼 수정에서 ETag가 그대로라 동시 수정을 막지 못합니다.
-- `on modify`라서 PATCH 응답에 오는 ETag도 바로 새 값입니다.
-- annotation(`@Semantics.systemDateTime.lastChangedAt`)으로 바꾸려면 루트 뷰에 annotation을 붙이고 `setEtag`(BDEF 줄 + 메서드)를 지우면 됩니다. 둘을 함께 쓰지 마세요.
+- `setChangeStamp`가 AEDAT/AEZET/AENAM을 채우고, 그중 AEZET가 ETag 값이 됩니다.
+- `on modify`라서 PATCH 응답에 오는 ETag도 바로 새 값입니다 (`on save`면 응답 ETag가 이전 값일 수 있음).
+- 트리거: 헤더 `field ItemGroupCode, KiloUnit;` / 아이템 `field ItemGroupCode, DetailedItemGroupCode;`
+  **수정 가능한 필드를 추가하면 `setChangeStamp` 트리거에도 꼭 추가하세요.** 빠지면 그 필드만 바꾼 수정에서 AEZET가 그대로라 ETag도 그대로입니다.
 
 ### 동작
 
-1. `GET`하면 응답에 ETag가 붙습니다.
-   - 단건 GET: 응답 헤더 `ETag: W/"20261127023015.1234567"` 형태
-   - 목록 GET: 각 행의 `"@odata.etag"` 값
+1. `GET`하면 ETag가 붙습니다. 단건은 응답 헤더 `ETag`, 목록은 각 행의 `"@odata.etag"`.
 2. `PATCH`, `DELETE`에 받은 값을 그대로 `If-Match` 헤더에 넣습니다.
-   ```
-   If-Match: W/"20261127023015.1234567"
-   ```
-3. 그 사이 다른 사람이 같은 행을 바꿨으면 값이 달라져 **412 Precondition Failed**로 거절됩니다. 다시 GET해서 새 값으로 보내세요.
-4. 성공하면 응답에 **새 ETag**가 옵니다. 같은 행을 또 수정할 때는 새 값을 써야 합니다.
+3. 그 사이 다른 사람이 수정했으면 **412 Precondition Failed**. 다시 GET해서 새 값으로 보내세요.
+4. 성공하면 응답에 새 ETag가 옵니다. 같은 행을 또 수정할 때는 새 값을 씁니다.
 
 | 응답 | 의미 |
 |---|---|
@@ -39,47 +31,27 @@
 | 428 Precondition Required | `If-Match` 헤더가 없음 |
 
 - `POST`(생성)에는 `If-Match`가 필요 없습니다.
-- `If-Match: *`는 **체크를 건너뜁니다**. 테스트용으로만 쓰고, 화면에서는 GET으로 받은 값을 보내세요.
-- `$batch`에서는 **안쪽 요청마다** `If-Match`를 넣습니다. 행마다 ETag가 다르니 각 행의 값을 넣으세요.
-
-### 예시
+- `If-Match: *`는 체크를 건너뜁니다. 테스트용으로만 쓰세요.
+- `$batch`에서는 안쪽 요청마다 그 행의 `If-Match`를 넣습니다.
 
 ```
 GET {base}Item(Plant='1100',Material='MAT001')
-→ ETag: W/"20261127023015.1234567"
-```
+→ ETag: W/"'134502'"        (형식은 응답 그대로 복사)
 
-```
 PATCH {base}Item(Plant='1100',Material='MAT001')
 Content-Type: application/json
-If-Match: W/"20261127023015.1234567"
+If-Match: W/"'134502'"
 X-CSRF-Token: <토큰>
 
 {"DetailedItemGroupCode":"DIG09"}
 ```
 
-`$batch` 안에서는:
-```
---changeset_1
-Content-Type: application/http
-Content-Transfer-Encoding: binary
-Content-ID: 1
+### AEZET를 ETag로 쓸 때의 한계
 
-PATCH Item(Plant='1100',Material='MAT001') HTTP/1.1
-Content-Type: application/json
-If-Match: W/"20261127023015.1234567"
-
-{"DetailedItemGroupCode":"DIG09"}
---changeset_1--
-```
-
-### 확인할 점 (ETag)
-
-- **기존 데이터**: 컬럼을 추가하면 기존 행의 `last_changed_at`은 빈 값입니다. 이때 ETag는 빈 값 기준(`W/"0.0000000"` 형태)으로 나오고 체크는 정상 동작합니다. 한 번 수정되면 실제 시각이 들어갑니다.
-- **테이블 변경**: 이미 데이터가 있는 테이블에 컬럼을 추가하면 활성화 시 테이블 조정이 필요할 수 있습니다 (SE14). 운영 테이블이라면 Basis와 확인하세요.
-- **값이 안 채워질 때**: `LastChangedAt`이 계속 빈 값이면 BDEF의 `setEtag` 줄과 behavior pool의 `setEtag` 메서드가 활성화됐는지 확인하세요. 바인딩 Unpublish → Publish도 해 보세요.
-- **값의 기준**: UTC 타임스탬프입니다. 화면 표시용으로 쓰지 말고 `ChangedTimestamp`를 쓰세요.
-- 기존 `ChangedTimestamp`(계산 필드)를 ETag로 쓰지 않은 이유: 계산 필드는 트랜잭션 버퍼에서 값이 갱신되지 않아 ETag로 쓸 수 없습니다.
+- **초 단위**: 같은 행을 같은 초 안에 두 번 수정하면 AEZET가 같아서 두 번째 충돌을 못 잡습니다.
+- **시간만 비교**: 날짜(AEDAT)는 ETag에 들어가지 않습니다. 예전에 받은 ETag의 시간이 다른 날 다른 사람이 수정한 시간과 초까지 똑같으면 충돌을 못 잡습니다. 드물지만 가능합니다.
+- **한 번도 수정 안 된 행**: 생성할 때 트리거 필드(ItemGroupCode 등)가 채워지면 AEZET도 함께 들어갑니다. 비어 있으면 빈 값 기준 ETag로 나오고 체크는 동작합니다.
+- 이 한계가 문제면 `timestampl` 컬럼(`last_changed_at`)을 따로 두는 방식이 확실합니다.
 
 ---
 
@@ -95,8 +67,8 @@ SaveAll action과 abstract entity(`ZMRMD_A_SaveClsHdr`, `ZMRMD_A_SaveClsItm`)가
 
 | 폴더 | 내용 |
 |---|---|
-| `01_tables` | `zmrmd_t_clshdr`, `zmrmd_t_clsitm` (`last_changed_at` 추가) |
-| `02_cds` | Base 뷰, 루트 뷰 (`LastChangedAt` 추가) |
+| `01_tables` | `zmrmd_t_clshdr`, `zmrmd_t_clsitm` (변경 없음) |
+| `02_cds` | Base 뷰, 루트 뷰 (변경 없음) |
 | `03_bdef` | 헤더·아이템 BDEF — 헤더에서 `static action SaveAll` 제거 |
 | `04_classes` | 헤더 behavior pool에서 `SaveAll` 제거. 나머지(determination, validation) 동일 |
 | `05_service` | Service Definition (변경 없음) |

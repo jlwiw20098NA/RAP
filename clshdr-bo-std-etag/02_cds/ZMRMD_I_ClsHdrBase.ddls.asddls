@@ -16,6 +16,5 @@ define view entity ZMRMD_I_ClsHdrBase
       ernam        as CreatedBy,
       aedat        as ChangeDate,
       aezet        as ChangeTime,
-      aenam        as ChangedBy,
-      last_changed_at as LastChangedAt      // [ETag #2]
+      aenam        as ChangedBy
 }

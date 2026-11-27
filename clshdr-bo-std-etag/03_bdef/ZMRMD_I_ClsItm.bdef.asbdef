@@ -1,4 +1,5 @@
 // [표준 HTTP + ETag 버전]
+// - [ETag] ETag = 변경시간(AEZET, ChangeTime). PATCH/DELETE는 If-Match에 GET으로 받은 ETag를 넣음
 // - 아이템도 표준 POST / PATCH / DELETE로 저장
 // - CompanyCode, ItemGroupCode(헤더 연결 값)는 화면이 POST 본문에 직접 넣음
 // - [수정 #10] 수정(PATCH) 가능 필드: ItemGroupCode, DetailedItemGroupCode
@@ -9,8 +10,8 @@ define behavior for ZMRMD_I_ClsItm alias Item
 persistent table zmrmd_t_clsitm
 lock master
 authorization master ( global )
-// [ETag #4] 동시 수정 체크: PATCH/DELETE의 If-Match 값이 현재 LastChangedAt과 다르면 412로 거절
-etag master LastChangedAt
+// [ETag #2] 동시 수정 체크: If-Match 값이 현재 ChangeTime(AEZET)과 다르면 412로 거절
+etag master ChangeTime
 {
   create;
   update;
@@ -23,18 +24,14 @@ etag master LastChangedAt
   field ( mandatory : create, readonly : update ) Plant, Material, CompanyCode;
   field ( mandatory : create ) ItemGroupCode;
   field ( readonly ) CreateDate, CreateTime, ChangeDate, ChangeTime,
-                     CreatedTimestamp, ChangedTimestamp, CreatedBy, ChangedBy,
-                     LastChangedAt;   // [ETag #4] 프레임워크가 채움
+                     CreatedTimestamp, ChangedTimestamp, CreatedBy, ChangedBy;
 
   determination setCreateStamp on save { create; }
   // [수정 #10] ItemGroupCode가 바뀔 때도 변경일시·변경자 갱신
-  determination setChangeStamp on save { field ItemGroupCode, DetailedItemGroupCode; }
-
-  // [ETag #5] 2026-11-27 ETag 값(LastChangedAt)을 클래스에서 채움 (annotation 대신)
-  //   on modify: 요청 처리 직후 버퍼에 반영 → PATCH 응답의 ETag도 새 값
-  //   트리거에 수정 가능한 필드를 모두 넣어야 함 (빠진 필드만 바꾸면 ETag가 안 바뀜)
-  //   LastChangedAt 자신은 트리거에 넣지 않음 (무한 반복)
-  determination setEtag on modify { create; field ItemGroupCode, DetailedItemGroupCode; }
+  // [ETag #3] on save → on modify
+  //   변경일시(AEDAT/AEZET)를 요청 처리 직후 버퍼에 반영 → PATCH 응답의 ETag도 새 값
+  //   트리거에 수정 가능한 필드를 모두 넣어야 함 (빠진 필드만 바꾸면 AEZET가 안 바뀌어 ETag도 그대로)
+  determination setChangeStamp on modify { field ItemGroupCode, DetailedItemGroupCode; }
 
   validation validatePlantMaterial on save { create; field Plant, Material; }
 
@@ -51,7 +48,6 @@ etag master LastChangedAt
     ChangeDate            = aedat;
     ChangeTime            = aezet;
     ChangedBy             = aenam;
-    LastChangedAt         = last_changed_at;   // [ETag #4]
     // CreatedTimestamp, ChangedTimestamp: 계산 필드라 매핑하지 않음
   }
 }
