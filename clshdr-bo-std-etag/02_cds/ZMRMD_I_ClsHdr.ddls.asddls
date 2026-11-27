@@ -39,9 +39,8 @@ define root view entity ZMRMD_I_ClsHdr
       // [수정 #9] @Semantics.user.lastChangedBy 제거 → determination setChangeStamp가 채움
       ChangedBy,
 
-      // [ETag #3] ETag 필드. 이 annotation이 있으면 managed 프레임워크가 생성·수정 때마다 현재 시각(UTC)으로 채움
-      //   BDEF의 etag master로 지정 → GET 응답에 ETag가 붙고, PATCH/DELETE는 If-Match로 이 값을 보내야 함
-      @Semantics.systemDateTime.lastChangedAt: true
+      // [ETag #3] ETag 필드. BDEF의 etag master로 지정 → GET 응답에 ETag가 붙고, PATCH/DELETE는 If-Match로 이 값을 보내야 함
+      // [ETag #5] 2026-11-27 @Semantics.systemDateTime.lastChangedAt 제거 → determination setEtag가 채움
       LastChangedAt,
 
       _Item

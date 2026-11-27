@@ -13,6 +13,10 @@ CLASS lhc_item DEFINITION INHERITING FROM cl_abap_behavior_handler.
 
     METHODS validatePlantMaterial FOR VALIDATE ON SAVE
       IMPORTING keys FOR Item~validatePlantMaterial.
+
+    " [ETag #5] ETag 값(LastChangedAt) 채우기
+    METHODS setEtag FOR DETERMINE ON MODIFY
+      IMPORTING keys FOR Item~setEtag.
 ENDCLASS.
 
 CLASS lhc_item IMPLEMENTATION.
@@ -82,6 +86,19 @@ CLASS lhc_item IMPLEMENTATION.
       ENDIF.
       CLEAR lv_exists.
     ENDLOOP.
+  ENDMETHOD.
+
+  METHOD setEtag.
+    " [ETag #5] 2026-11-27 생성·수정 때마다 현재 UTC 타임스탬프(소수점 7자리)로 갱신
+    "  초 단위(get_system_time)는 같은 초에 두 번 수정하면 ETag가 같아져서 쓰지 않음
+    DATA lv_ts TYPE timestampl.        " 테이블 필드 타입 abp_lastchange_tstmpl과 같은 타입
+    GET TIME STAMP FIELD lv_ts.
+
+    MODIFY ENTITIES OF zmrmd_i_clsitm IN LOCAL MODE
+      ENTITY Item
+      UPDATE FIELDS ( LastChangedAt )
+      WITH VALUE #( FOR k IN keys ( %tky          = k-%tky
+                                    LastChangedAt = lv_ts ) ).
   ENDMETHOD.
 
 ENDCLASS.

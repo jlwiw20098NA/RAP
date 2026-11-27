@@ -11,10 +11,15 @@
 |---|---|---|
 | #1 | 테이블 2개 | `last_changed_at : abp_lastchange_tstmpl` 컬럼 추가 |
 | #2 | Base 뷰 2개 | `last_changed_at as LastChangedAt` |
-| #3 | 루트 뷰 2개 | `@Semantics.systemDateTime.lastChangedAt: true LastChangedAt` → managed 프레임워크가 생성·수정 때마다 자동으로 채움 |
+| #3 | 루트 뷰 2개 | `LastChangedAt` 노출 (annotation 없음, #5 참고) |
 | #4 | BDEF 2개 | `etag master LastChangedAt`, `LastChangedAt` readonly, mapping 추가 |
+| #5 | BDEF 2개, behavior pool 2개 | `determination setEtag on modify { create; field <수정 가능 필드>; }` → 클래스에서 `GET TIME STAMP`(timestampl)로 채움 |
 
-behavior pool(클래스)은 바뀌지 않았습니다.
+**ETag 값은 annotation이 아니라 클래스(`setEtag`)가 채웁니다.**
+- 트리거: 헤더 `create; field ItemGroupCode, KiloUnit;` / 아이템 `create; field ItemGroupCode, DetailedItemGroupCode;`
+- **수정 가능한 필드를 추가하면 `setEtag` 트리거에도 꼭 추가하세요.** 빠지면 그 필드만 바꾼 수정에서 ETag가 그대로라 동시 수정을 막지 못합니다.
+- `on modify`라서 PATCH 응답에 오는 ETag도 바로 새 값입니다.
+- annotation(`@Semantics.systemDateTime.lastChangedAt`)으로 바꾸려면 루트 뷰에 annotation을 붙이고 `setEtag`(BDEF 줄 + 메서드)를 지우면 됩니다. 둘을 함께 쓰지 마세요.
 
 ### 동작
 
@@ -72,7 +77,7 @@ If-Match: W/"20261127023015.1234567"
 
 - **기존 데이터**: 컬럼을 추가하면 기존 행의 `last_changed_at`은 빈 값입니다. 이때 ETag는 빈 값 기준(`W/"0.0000000"` 형태)으로 나오고 체크는 정상 동작합니다. 한 번 수정되면 실제 시각이 들어갑니다.
 - **테이블 변경**: 이미 데이터가 있는 테이블에 컬럼을 추가하면 활성화 시 테이블 조정이 필요할 수 있습니다 (SE14). 운영 테이블이라면 Basis와 확인하세요.
-- **자동 채움이 안 될 때**: `LastChangedAt`이 계속 빈 값이면 루트 뷰의 `@Semantics.systemDateTime.lastChangedAt` annotation이 빠졌거나 활성화되지 않은 것입니다. 바인딩 Unpublish → Publish도 해 보세요.
+- **값이 안 채워질 때**: `LastChangedAt`이 계속 빈 값이면 BDEF의 `setEtag` 줄과 behavior pool의 `setEtag` 메서드가 활성화됐는지 확인하세요. 바인딩 Unpublish → Publish도 해 보세요.
 - **값의 기준**: UTC 타임스탬프입니다. 화면 표시용으로 쓰지 말고 `ChangedTimestamp`를 쓰세요.
 - 기존 `ChangedTimestamp`(계산 필드)를 ETag로 쓰지 않은 이유: 계산 필드는 트랜잭션 버퍼에서 값이 갱신되지 않아 ETag로 쓸 수 없습니다.
 

@@ -30,6 +30,12 @@ etag master LastChangedAt
   // [수정 #10] ItemGroupCode가 바뀔 때도 변경일시·변경자 갱신
   determination setChangeStamp on save { field ItemGroupCode, DetailedItemGroupCode; }
 
+  // [ETag #5] 2026-11-27 ETag 값(LastChangedAt)을 클래스에서 채움 (annotation 대신)
+  //   on modify: 요청 처리 직후 버퍼에 반영 → PATCH 응답의 ETag도 새 값
+  //   트리거에 수정 가능한 필드를 모두 넣어야 함 (빠진 필드만 바꾸면 ETag가 안 바뀜)
+  //   LastChangedAt 자신은 트리거에 넣지 않음 (무한 반복)
+  determination setEtag on modify { create; field ItemGroupCode, DetailedItemGroupCode; }
+
   validation validatePlantMaterial on save { create; field Plant, Material; }
 
   mapping for zmrmd_t_clsitm

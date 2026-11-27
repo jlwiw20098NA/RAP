@@ -18,6 +18,6 @@ define table zmrmd_t_clshdr {
   aedat            : abap.dats;           // 변경일
   aezet            : abap.tims;           // 변경시간
   aenam            : abp_lastchange_user; // 변경자
-  // [ETag #1] ETag용 최종 변경 타임스탬프. 프레임워크가 생성·수정 때마다 자동으로 채움
+  // [ETag #1] ETag용 최종 변경 타임스탬프. determination setEtag가 생성·수정 때마다 채움 ([ETag #5])
   last_changed_at  : abp_lastchange_tstmpl;
 }
