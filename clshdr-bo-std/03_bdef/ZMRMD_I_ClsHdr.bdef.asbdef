@@ -1,6 +1,7 @@
 // [표준 HTTP 버전]
 // - 저장은 표준 POST / PATCH / DELETE (SaveAll action, abstract entity 없음)
 // - 헤더와 아이템을 한 번에 저장하려면 $batch changeset 하나로 묶음 → 한 LUW
+// - [수정 #10] 수정(PATCH) 가능 필드: ItemGroupCode, KiloUnit
 managed implementation in class zbp_mrmd_i_clshdr unique;
 strict ( 2 );
 
@@ -15,6 +16,9 @@ authorization master ( global )
 
   field ( mandatory : create, readonly : update )
     CompanyCode, ClassLevel1, ClassLevel2, ClassLevel3, ManufacturingProcess;
+  // [수정 #10] 2026-11-27 수정(PATCH) 가능 필드는 ItemGroupCode, KiloUnit 두 개
+  //   키 5개는 readonly : update, 나머지는 readonly → 이 두 필드만 PATCH로 변경됨
+  //   PATCH 본문에 들어온 필드만 그 값으로 변경 (들어오지 않은 필드는 기존 값 유지)
   field ( mandatory ) ItemGroupCode;
   field ( readonly ) CreateDate, CreateTime, ChangeDate, ChangeTime,
                      CreatedTimestamp, ChangedTimestamp, CreatedBy, ChangedBy;

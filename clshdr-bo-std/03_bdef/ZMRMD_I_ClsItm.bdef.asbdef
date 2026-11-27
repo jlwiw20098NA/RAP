@@ -1,6 +1,7 @@
 // [표준 HTTP 버전]
 // - 아이템도 표준 POST / PATCH / DELETE로 저장
 // - CompanyCode, ItemGroupCode(헤더 연결 값)는 화면이 POST 본문에 직접 넣음
+// - [수정 #10] 수정(PATCH) 가능 필드: ItemGroupCode, DetailedItemGroupCode
 managed implementation in class zbp_mrmd_i_clsitm unique;
 strict ( 2 );
 
@@ -13,13 +14,18 @@ authorization master ( global )
   update;
   delete;
 
-  // 아이템 키 + 헤더 연결 필드: 생성 때만 지정, 수정 불가
-  field ( mandatory : create, readonly : update ) Plant, Material, CompanyCode, ItemGroupCode;
+  // 아이템 키 + 회사코드: 생성 때만 지정, 수정 불가
+  // [수정 #10] 2026-11-27 ItemGroupCode를 수정 가능하게 변경 (readonly : update 제거)
+  //   PATCH 본문에 ItemGroupCode, DetailedItemGroupCode 중 들어온 필드만 그 값으로 변경
+  //   (들어오지 않은 필드는 기존 값 유지 = PATCH 기본 동작)
+  field ( mandatory : create, readonly : update ) Plant, Material, CompanyCode;
+  field ( mandatory : create ) ItemGroupCode;
   field ( readonly ) CreateDate, CreateTime, ChangeDate, ChangeTime,
                      CreatedTimestamp, ChangedTimestamp, CreatedBy, ChangedBy;
 
   determination setCreateStamp on save { create; }
-  determination setChangeStamp on save { field DetailedItemGroupCode; }
+  // [수정 #10] ItemGroupCode가 바뀔 때도 변경일시·변경자 갱신
+  determination setChangeStamp on save { field ItemGroupCode, DetailedItemGroupCode; }
 
   validation validatePlantMaterial on save { create; field Plant, Material; }
 
