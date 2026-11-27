@@ -1,0 +1,54 @@
+// [표준 HTTP + ETag 버전]
+// - 저장은 표준 POST / PATCH / DELETE (SaveAll action, abstract entity 없음)
+// - 헤더와 아이템을 한 번에 저장하려면 $batch changeset 하나로 묶음 → 한 LUW
+// - [수정 #10] 수정(PATCH) 가능 필드: ItemGroupCode, KiloUnit
+managed implementation in class zbp_mrmd_i_clshdr unique;
+strict ( 2 );
+
+define behavior for ZMRMD_I_ClsHdr alias Header
+persistent table zmrmd_t_clshdr
+lock master
+authorization master ( global )
+// [ETag #4] 동시 수정 체크: PATCH/DELETE의 If-Match 값이 현재 LastChangedAt과 다르면 412로 거절
+etag master LastChangedAt
+{
+  create;
+  update;
+  delete;
+
+  field ( mandatory : create, readonly : update )
+    CompanyCode, ClassLevel1, ClassLevel2, ClassLevel3, ManufacturingProcess;
+  // [수정 #10] 2026-11-27 수정(PATCH) 가능 필드는 ItemGroupCode, KiloUnit 두 개
+  //   키 5개는 readonly : update, 나머지는 readonly → 이 두 필드만 PATCH로 변경됨
+  //   PATCH 본문에 들어온 필드만 그 값으로 변경 (들어오지 않은 필드는 기존 값 유지)
+  field ( mandatory ) ItemGroupCode;
+  field ( readonly ) CreateDate, CreateTime, ChangeDate, ChangeTime,
+                     CreatedTimestamp, ChangedTimestamp, CreatedBy, ChangedBy,
+                     LastChangedAt;   // [ETag #4] 프레임워크가 채움
+
+  // 생성/변경 일시 (ERDAT/ERZET, AEDAT/AEZET)
+  // 변경 트리거는 업무 필드만: 'update' 전체로 걸면 자기 변경으로 재실행될 수 있음
+  determination setCreateStamp on save { create; }
+  determination setChangeStamp on save { field ItemGroupCode, KiloUnit; }
+
+  validation validateCompanyCode on save { create; field CompanyCode; }
+
+  mapping for zmrmd_t_clshdr
+  {
+    CompanyCode          = company_code;
+    ClassLevel1          = class_level1;
+    ClassLevel2          = class_level2;
+    ClassLevel3          = class_level3;
+    ManufacturingProcess = mfg_process;
+    ItemGroupCode        = item_group;
+    KiloUnit             = kilo_unit;
+    CreateDate           = erdat;
+    CreateTime           = erzet;
+    CreatedBy            = ernam;
+    ChangeDate           = aedat;
+    ChangeTime           = aezet;
+    ChangedBy            = aenam;
+    LastChangedAt        = last_changed_at;   // [ETag #4]
+    // CreatedTimestamp, ChangedTimestamp: 계산 필드라 매핑하지 않음
+  }
+}
